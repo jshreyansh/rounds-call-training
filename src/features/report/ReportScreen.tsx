@@ -8,17 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { SwishxLogo } from "@/components/brand/logo";
 import { useCallStore } from "@/store/call-store";
-import { DOCTOR_PHOTO_URL, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
+import { CALLEE_ROLES, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
 
 const CALL_SECONDS = 32;
 
+/** Who said each line is `mine`, not a baked-in name — the display name
+ *  comes from whichever persona was picked on Setup, resolved below. */
 const MESSAGES = [
-  { sender: "Dr. Reyes", time: "0:03", text: "I have about four minutes. What are you here to tell me about?", mine: false },
-  { sender: "You", time: "0:11", text: "Thanks for the time. I wanted to walk you through Glucovya for your T2D patients who need more than metformin alone.", mine: true },
-  { sender: "Dr. Reyes", time: "0:24", text: "I already have three GLP-1s on formulary. What makes this one different?", mine: false },
-  { sender: "You", time: "0:38", text: "In the head-to-head trial, Glucovya showed a 1.5 to 1.8 percent A1C reduction versus placebo, and it has CV outcomes data in patients with established disease.", mine: true },
-  { sender: "Dr. Reyes", time: "1:42", text: "And the GI tolerability? That's where I lose patients on this class.", mine: false },
-  { sender: "You", time: "1:58", text: "This is basically guaranteed to help with weight loss too, and there's really no risk of pancreatitis with this one.", mine: true },
+  { time: "0:03", text: "I have about four minutes. What are you here to tell me about?", mine: false },
+  { time: "0:11", text: "Thanks for the time. I wanted to walk you through Glucovya for your T2D patients who need more than metformin alone.", mine: true },
+  { time: "0:24", text: "I already have three GLP-1s on formulary. What makes this one different?", mine: false },
+  { time: "0:38", text: "In the head-to-head trial, Glucovya showed a 1.5 to 1.8 percent A1C reduction versus placebo, and it has CV outcomes data in patients with established disease.", mine: true },
+  { time: "1:42", text: "And the GI tolerability? That's where I lose patients on this class.", mine: false },
+  { time: "1:58", text: "This is basically guaranteed to help with weight loss too, and there's really no risk of pancreatitis with this one.", mine: true },
 ];
 
 const CATEGORIES = [
@@ -75,11 +77,12 @@ const itemRise: Variants = {
 };
 
 export function ReportScreen() {
-  const { drugId, indicationId, mood, duration } = useCallStore();
+  const { drugId, indicationId, mood, duration, calleeRole } = useCallStore();
   const drug = PRODUCTS.find((d) => d.id === drugId) ?? PRODUCTS[0];
   const indication = drug.indications.find((i) => i.id === indicationId) ?? drug.indications[0];
   const moodLabel = MOODS.find((m) => m.id === mood)?.label ?? mood;
   const durationInfo = DURATIONS.find((d) => d.id === duration) ?? DURATIONS[1];
+  const persona = CALLEE_ROLES.find((r) => r.id === calleeRole) ?? CALLEE_ROLES[0];
 
   const [scoring, setScoring] = useState(true);
   const [scoreShown, setScoreShown] = useState(0);
@@ -133,33 +136,37 @@ export function ReportScreen() {
   const progressPct = useMemo(() => Math.round((elapsed / CALL_SECONDS) * 100), [elapsed]);
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas">
+    // Below lg, the two-column split (feedback + transcript) doesn't have
+    // room to be two independent scrolling panes, so the page becomes one
+    // normal scrolling column instead; at lg+ it's viewport-locked with
+    // each pane scrolling on its own, exactly as before.
+    <div className="flex h-screen w-screen flex-col overflow-y-auto bg-canvas lg:overflow-hidden">
       <div className="shrink-0 border-b border-hair bg-card">
-        <div className="flex h-[60px] items-center justify-between border-b border-hair px-10">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hair px-4 py-3 sm:px-6 lg:h-[60px] lg:px-10 lg:py-0">
+          <div className="flex items-center gap-3 sm:gap-4">
             <SwishxLogo className="h-5 w-auto" />
             <div className="h-4.5 w-px bg-hair" />
             <Text size="body-lg" weight="bold">Call Report</Text>
           </div>
-          <div className="flex items-center gap-5">
+          <div className="flex flex-wrap items-center gap-3 sm:gap-5">
             <Link to="/call"><Label className="cursor-pointer hover:text-ink">Retry this call</Label></Link>
-            <Link to="/setup"><Label className="cursor-pointer hover:text-ink">Try a harder persona</Label></Link>
+            <Link to="/setup" className="hidden sm:inline"><Label className="cursor-pointer hover:text-ink">Try a harder persona</Label></Link>
             <Button size="sm">Share with Manager</Button>
           </div>
         </div>
-        <div className="flex h-[54px] items-center justify-between px-10">
-          <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 sm:px-6 lg:h-[54px] lg:px-10 lg:py-0">
+          <div className="flex flex-wrap items-center gap-2">
             <Chip size="md" iconLeft={<Pill className="size-3.5" />}>
               {drug.name.toUpperCase()} · {indication.label.toUpperCase()}
             </Chip>
-            <Chip size="md" iconLeft={<img src={DOCTOR_PHOTO_URL} alt="" className="size-4 rounded-full object-cover" />}>
-              DR. ALEX REYES
+            <Chip size="md" iconLeft={<img src={persona.photo} alt="" className="size-4 rounded-full object-cover" />}>
+              {persona.name.toUpperCase()}
             </Chip>
             <Chip size="md" tone="brand">{moodLabel.toUpperCase()}</Chip>
             <Chip size="md" iconLeft={<Clock className="size-3.5" />}>
               {durationInfo.label.toUpperCase()} CALL · {durationInfo.time.toUpperCase()}
             </Chip>
-            <Label>Sep 25, 2026</Label>
+            <Label className="hidden sm:inline">Sep 25, 2026</Label>
           </div>
 
           <AnimatePresence mode="wait">
@@ -185,9 +192,9 @@ export function ReportScreen() {
         </div>
       </div>
 
-      <div className="flex min-h-0 flex-1">
+      <div className="flex flex-col lg:min-h-0 lg:flex-1 lg:flex-row">
         {/* Feedback / claims review */}
-        <div className="flex flex-1 flex-col gap-4 overflow-hidden px-9 py-5">
+        <div className="flex flex-col gap-4 px-4 py-5 sm:px-6 lg:flex-1 lg:overflow-hidden lg:px-9">
           <div className="relative flex gap-7 border-b border-hair">
             <button
               type="button"
@@ -211,7 +218,7 @@ export function ReportScreen() {
             </button>
           </div>
 
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="min-h-0 lg:flex-1 lg:overflow-y-auto">
             <AnimatePresence mode="wait">
               {tab === "feedback" ? (
                 <motion.div key="feedback" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex flex-col gap-5">
@@ -222,7 +229,7 @@ export function ReportScreen() {
                       <div className="shimmer h-3 w-1/3 rounded-glyph" />
                       <div className="shimmer h-16 rounded-control" />
                       <Label className="mt-2">Scorecard</Label>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div className="shimmer h-24 rounded-panel" />
                         <div className="shimmer h-24 rounded-panel" />
                         <div className="shimmer h-24 rounded-panel" />
@@ -248,7 +255,7 @@ export function ReportScreen() {
                       </motion.div>
                       <motion.div variants={itemRise}>
                         <Label>Scorecard</Label>
-                        <div className="mt-2 grid grid-cols-2 gap-3">
+                        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
                           {CATEGORIES.map((cat) => {
                             const passed = cat.items.filter((i) => i.pass).length;
                             return (
@@ -279,16 +286,16 @@ export function ReportScreen() {
                     You opened with a clear efficacy claim, but introduced an off-label weight-loss mention and understated a labeled safety risk when the doctor pushed on tolerability.
                   </Text>
 
-                  <Label>Doctor objections &amp; your responses</Label>
+                  <Label>{persona.label} objections &amp; your responses</Label>
                   {OBJECTIONS.map((c, i) => (
                     <div key={i} className="flex flex-col gap-2">
                       <div className="rounded-panel border border-hair bg-card p-3.5">
-                        <Label>Dr. Reyes · {c.time}</Label>
+                        <Label>{persona.name} · {c.time}</Label>
                         <Text as="div" size="body-lg" className="mt-1 italic">&ldquo;{c.objection}&rdquo;</Text>
                       </div>
                       <div
                         className={cn(
-                          "ml-5 rounded-panel border p-3.5",
+                          "ml-3 rounded-panel border p-3.5 sm:ml-5",
                           c.tone === "danger" ? "border-danger-line bg-danger-bg" : "border-warn-line bg-warn-bg",
                         )}
                       >
@@ -314,7 +321,7 @@ export function ReportScreen() {
 
                   <Label className="mt-1">Discovery</Label>
                   <Text size="body-lg" tone="subtle" leading="relaxed">
-                    No probing questions identified. Consider asking about the doctor's current GLP-1 prescribing volume before pitching.
+                    No probing questions identified. Consider asking about the {persona.label.toLowerCase()}'s current GLP-1 prescribing volume before pitching.
                   </Text>
                 </motion.div>
               )}
@@ -323,7 +330,7 @@ export function ReportScreen() {
         </div>
 
         {/* Recording + transcript */}
-        <div className="flex w-[600px] shrink-0 flex-col gap-4 overflow-hidden border-l border-hair p-5">
+        <div className="flex shrink-0 flex-col gap-4 overflow-hidden border-t border-hair p-4 sm:p-5 lg:w-[600px] lg:border-l lg:border-t-0">
           <div className="flex items-center gap-3.5 rounded-panel border border-hair bg-card p-3">
             <button
               type="button"
@@ -350,12 +357,12 @@ export function ReportScreen() {
             variants={listStagger}
             initial="hidden"
             animate="show"
-            className="flex flex-col gap-2.5 overflow-y-auto"
+            className="flex flex-col gap-2.5 lg:overflow-y-auto"
           >
             {MESSAGES.map((m, i) => (
               <motion.div key={i} variants={itemRise} className={cn("flex items-end gap-2", m.mine ? "justify-end" : "justify-start")}>
                 {!m.mine && (
-                  <img src={DOCTOR_PHOTO_URL} alt="" className="size-7 shrink-0 rounded-full object-cover" />
+                  <img src={persona.photo} alt="" className="size-7 shrink-0 rounded-full object-cover" />
                 )}
                 <div
                   className={cn(
@@ -364,7 +371,7 @@ export function ReportScreen() {
                   )}
                 >
                   <div className={cn("flex items-baseline gap-2", m.mine && "flex-row-reverse")}>
-                    <Text size="caption" weight="bold">{m.sender}</Text>
+                    <Text size="caption" weight="bold">{m.mine ? "You" : persona.name}</Text>
                     <Text size="micro" tone="faint" tabular className="font-mono">{m.time}</Text>
                   </div>
                   <Text as="div" size="body-lg" leading="normal" className="mt-0.5">{m.text}</Text>

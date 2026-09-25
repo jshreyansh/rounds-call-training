@@ -9,21 +9,23 @@ import { Chip } from "@/components/ui/chip";
 import { Sheet } from "@/components/patterns/sheet";
 import { SwishxMark } from "@/components/brand/logo";
 import { useCallStore } from "@/store/call-store";
-import { DOCTOR_NAME, DOCTOR_PHOTO_URL, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
+import { CALLEE_ROLES, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
 
 type Phase = "connecting" | "live" | "wrap" | "ready";
 type Speaker = "doctor" | "rep";
 
 /** Reveal seconds are a compressed demo timeline, not the literal call
  *  length — this is a practice simulation, so the captions arrive at a
- *  pace someone can actually sit through, not the real 4 minutes. */
+ *  pace someone can actually sit through, not the real 4 minutes. Who
+ *  said each line is `mine`, not a baked-in name — the display name is
+ *  whichever persona is currently selected, resolved at render time. */
 const TRANSCRIPT = [
-  { sender: DOCTOR_NAME, mine: false, at: 2, text: "I have about four minutes. What are you here to tell me about?" },
-  { sender: "You", mine: true, at: 6, text: "Thanks for the time. I wanted to walk you through Glucovya for your T2D patients who need more than metformin alone." },
-  { sender: DOCTOR_NAME, mine: false, at: 11, text: "I already have three GLP-1s on formulary. What makes this one different?" },
-  { sender: "You", mine: true, at: 16, text: "In the head-to-head trial, Glucovya showed a 1.5 to 1.8 percent A1C reduction versus placebo, and it has CV outcomes data in patients with established disease." },
-  { sender: DOCTOR_NAME, mine: false, at: 22, text: "And the GI tolerability? That's where I lose patients on this class." },
-  { sender: "You", mine: true, at: 27, text: "This is basically guaranteed to help with weight loss too, and there's really no risk of pancreatitis with this one." },
+  { mine: false, at: 2, text: "I have about four minutes. What are you here to tell me about?" },
+  { mine: true, at: 6, text: "Thanks for the time. I wanted to walk you through Glucovya for your T2D patients who need more than metformin alone." },
+  { mine: false, at: 11, text: "I already have three GLP-1s on formulary. What makes this one different?" },
+  { mine: true, at: 16, text: "In the head-to-head trial, Glucovya showed a 1.5 to 1.8 percent A1C reduction versus placebo, and it has CV outcomes data in patients with established disease." },
+  { mine: false, at: 22, text: "And the GI tolerability? That's where I lose patients on this class." },
+  { mine: true, at: 27, text: "This is basically guaranteed to help with weight loss too, and there's really no risk of pancreatitis with this one." },
 ];
 
 /** Matches the demo score Report lands on after its own reveal animation
@@ -69,7 +71,7 @@ function SpeakingBadge({ size = "md" }: { size?: "sm" | "md" }) {
       animate={{ opacity: 1, scale: 1 }}
       className={cn(
         "absolute flex items-center gap-1 rounded-full bg-black/50 font-semibold text-live",
-        sm ? "right-2.5 top-2.5 px-2 py-0.5 text-micro" : "right-4 top-4 px-2.5 py-1 text-micro",
+        sm ? "right-2.5 top-2.5 px-2 py-0.5 text-micro" : "right-3 top-3 px-2.5 py-1 text-micro sm:right-4 sm:top-4",
       )}
     >
       <motion.span
@@ -86,11 +88,12 @@ function SpeakingBadge({ size = "md" }: { size?: "sm" | "md" }) {
 
 export function CallScreen() {
   const navigate = useNavigate();
-  const { drugId, indicationId, mood, duration } = useCallStore();
+  const { drugId, indicationId, mood, duration, calleeRole } = useCallStore();
   const drug = PRODUCTS.find((d) => d.id === drugId) ?? PRODUCTS[0];
   const indication = drug.indications.find((i) => i.id === indicationId) ?? drug.indications[0];
   const moodInfo = MOODS.find((m) => m.id === mood) ?? MOODS[0];
   const durationInfo = DURATIONS.find((d) => d.id === duration) ?? DURATIONS[0];
+  const persona = CALLEE_ROLES.find((r) => r.id === calleeRole) ?? CALLEE_ROLES[0];
 
   const [phase, setPhase] = useState<Phase>("connecting");
   const [briefOpen, setBriefOpen] = useState(false);
@@ -163,8 +166,8 @@ export function CallScreen() {
         <div className="absolute inset-0 bg-gradient-to-t from-ink via-transparent to-ink/50" />
       </div>
 
-      <div className="relative z-10 flex h-14 shrink-0 items-center justify-between px-6">
-        <div className="flex items-center gap-4">
+      <div className="relative z-10 flex h-12 shrink-0 items-center justify-between px-4 sm:h-14 sm:px-6">
+        <div className="flex items-center gap-3 sm:gap-4">
           <IconButton aria-label="Back to setup" tone="onDark" onClick={() => navigate("/setup")}>
             <ArrowLeft className="size-4" />
           </IconButton>
@@ -184,76 +187,99 @@ export function CallScreen() {
         )}
       </div>
 
-      <div className="relative z-0 flex min-h-0 flex-1">
-        <div className="relative flex min-w-0 flex-1 flex-col">
-          {/* Two equal tiles, not one dominant tile with the other person
-              floating small in a corner — a call is between two people of
-              equal standing, so the layout should say that. You're in the
-              call from the first frame; the doctor's tile shows its own
-              "still connecting" state until the join actually lands, at
-              which point the join sound plays and the tile swaps to their
-              live presence. */}
-          <div className="flex min-h-0 flex-1 gap-5 px-6 pb-[104px] pt-6">
-            <div
-              className="relative flex-1 overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl"
-              style={{ opacity: dimmed ? 0.35 : 1, transition: "opacity 400ms ease" }}
-            >
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <div
-                  className="flex size-28 items-center justify-center rounded-full bg-ink-3 text-display font-semibold text-white transition-shadow duration-150"
-                  style={{ boxShadow: levelGlow(repLevel) }}
+      {/* Below lg, the sidebar-and-stage split doesn't have room to breathe
+          (a 360px caption rail plus two video tiles just doesn't fit a
+          phone or a portrait tablet), so the whole thing becomes one
+          scrolling column instead: stage first, captions right under it.
+          At lg+ it's viewport-locked exactly as before. */}
+      <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
+        <div className="relative flex min-h-[480px] shrink-0 flex-col lg:min-h-0 lg:min-w-0 lg:flex-1">
+          {/* You're in the call from the first frame; the other party
+              isn't rendered as a tile at all until they've actually
+              joined — just a slim banner above naming who's on their way
+              in, the way a real conferencing app shows it, rather than a
+              second tile sitting there mid-"connecting" as if it were
+              already occupied. The moment the join lands (join sound +
+              tile mount), the layout becomes the equal two-tile split. */}
+          <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-24 pt-4 sm:gap-3 sm:px-6 sm:pb-[104px] sm:pt-6">
+            <AnimatePresence>
+              {phase === "connecting" && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0 }}
+                  transition={{ duration: 0.3 }}
+                  className="flex shrink-0 items-center justify-center gap-2 rounded-panel border border-white/10 bg-black/30 px-4 py-2.5"
                 >
-                  SJ
-                </div>
-              </div>
-              <div className="absolute bottom-5 left-5 rounded-full bg-black/50 px-3.5 py-2">
-                <Text size="body-lg" tone="inverse" weight="semibold">You</Text>
-              </div>
-              {micMuted && (
-                <div className="absolute right-4 top-4 flex items-center justify-center rounded-full bg-black/50 p-2 text-white/70">
-                  <MicOff className="size-3.5" />
-                </div>
+                  <SwishxMark className="size-3.5 text-white/50" />
+                  <Text size="caption" className="text-white/60">
+                    {persona.name} is joining
+                  </Text>
+                  <motion.span
+                    className="flex gap-0.5 text-white/60"
+                    animate={{ opacity: [0.3, 1, 0.3] }}
+                    transition={{ duration: 1.4, repeat: Infinity }}
+                  >
+                    &hellip;
+                  </motion.span>
+                </motion.div>
               )}
-              {phase === "live" && speaker === "rep" && !micMuted && <SpeakingBadge />}
-            </div>
+            </AnimatePresence>
 
+            {/* Solo, the tile is capped and centered rather than
+                stretching edge to edge — a lone participant filling the
+                whole stage reads as a placeholder that grew too big, not
+                as "waiting for the other person." It only goes full-width
+                once there are two tiles sharing the row. */}
             <div
-              className="relative flex-1 overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl"
-              style={{ opacity: dimmed ? 0.35 : 1, transition: "opacity 400ms ease" }}
+              className={cn(
+                "flex min-h-0 flex-1 flex-col gap-4 sm:flex-row sm:gap-5",
+                phase === "connecting" && "sm:mx-auto sm:w-full sm:max-w-xl",
+              )}
             >
-              <AnimatePresence mode="wait" initial={false}>
-                {phase === "connecting" ? (
-                  <motion.div
-                    key="connecting"
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="absolute inset-0 flex flex-col items-center justify-center gap-3"
+              <div
+                className="relative min-h-[180px] flex-1 overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl"
+                style={{ opacity: dimmed ? 0.35 : 1, transition: "opacity 400ms ease" }}
+              >
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <div
+                    className="flex size-20 items-center justify-center rounded-full bg-ink-3 text-title font-semibold text-white transition-shadow duration-150 sm:size-24 sm:text-display lg:size-28"
+                    style={{ boxShadow: levelGlow(repLevel) }}
                   >
-                    <SwishxMark className="size-7 text-white/60" />
-                    <div className="flex items-center gap-2 font-mono text-body text-white/60">
-                      <span>Connecting {DOCTOR_NAME}</span>
-                      <motion.span animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1.4, repeat: Infinity }}>&hellip;</motion.span>
-                    </div>
-                  </motion.div>
-                ) : (
+                    SJ
+                  </div>
+                </div>
+                <div className="absolute bottom-3 left-3 rounded-full bg-black/50 px-3 py-1.5 sm:bottom-5 sm:left-5 sm:px-3.5 sm:py-2">
+                  <Text size="body-lg" tone="inverse" weight="semibold">You</Text>
+                </div>
+                {micMuted && (
+                  <div className="absolute right-3 top-3 flex items-center justify-center rounded-full bg-black/50 p-2 text-white/70 sm:right-4 sm:top-4">
+                    <MicOff className="size-3.5" />
+                  </div>
+                )}
+                {phase === "live" && speaker === "rep" && !micMuted && <SpeakingBadge />}
+              </div>
+
+              <AnimatePresence>
+                {phase !== "connecting" && (
                   <motion.div
-                    key="joined"
                     initial={{ opacity: 0, scale: 0.94 }}
-                    animate={{ opacity: 1, scale: 1 }}
+                    animate={{ opacity: dimmed ? 0.35 : 1, scale: 1 }}
+                    exit={{ opacity: 0 }}
                     transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
-                    className="absolute inset-0 flex flex-col items-center justify-center"
+                    className="relative min-h-[180px] flex-1 overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl"
                   >
-                    <img
-                      src={DOCTOR_PHOTO_URL}
-                      alt=""
-                      className="size-28 rounded-full object-cover transition-shadow duration-150"
-                      style={{ boxShadow: levelGlow(doctorLevel) }}
-                    />
-                    <div className="absolute bottom-5 left-5 flex items-center gap-2 rounded-full bg-black/50 px-3.5 py-2">
-                      <Text size="body-lg" tone="inverse" weight="semibold">{DOCTOR_NAME}</Text>
-                      <Text size="body" className="text-white/60">Endocrinology</Text>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center">
+                      <img
+                        src={persona.photo}
+                        alt=""
+                        className="size-20 rounded-full object-cover transition-shadow duration-150 sm:size-24 lg:size-28"
+                        style={{ boxShadow: levelGlow(doctorLevel) }}
+                      />
+                    </div>
+                    <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-full bg-black/50 px-3 py-1.5 sm:bottom-5 sm:left-5 sm:px-3.5 sm:py-2">
+                      <Text size="body-lg" tone="inverse" weight="semibold">{persona.name}</Text>
+                      <Text size="body" className="text-white/60">{persona.label}</Text>
                     </div>
                     {phase === "live" && (speaker === "doctor" ? (
                       <SpeakingBadge />
@@ -261,7 +287,7 @@ export function CallScreen() {
                       <motion.div
                         initial={{ opacity: 0, scale: 0.9 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="absolute right-4 top-4 flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-micro font-semibold text-white/55"
+                        className="absolute right-3 top-3 flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-micro font-semibold text-white/55 sm:right-4 sm:top-4"
                       >
                         <Ear className="size-3" />
                         Listening
@@ -279,7 +305,7 @@ export function CallScreen() {
                 initial={{ opacity: 0, y: 8 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: 8 }}
-                className="absolute bottom-6 left-1/2 flex -translate-x-1/2 items-center gap-3.5 rounded-full border border-white/15 bg-black/40 px-4 py-2.5"
+                className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3.5 rounded-full border border-white/15 bg-black/40 px-4 py-2.5 sm:bottom-6"
               >
                 <IconButton
                   aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
@@ -307,16 +333,21 @@ export function CallScreen() {
 
         {/* Live captions — so the rep can follow the exchange without
             replaying it later. Only exists once there is something said.
-            A floating glass tile, like the doctor and rep tiles, not a
-            flush panel that touches the header and the screen edge. */}
+            A floating glass tile, like the doctor and rep tiles, at lg+;
+            below that it drops out of the sidebar and becomes its own
+            full-width block under the stage instead of disappearing.
+            Width is set entirely by these classes, never animated — a
+            growing "width: auto" here would fight the fixed lg sidebar
+            width once captions text piled up, squeezing the video tiles
+            into thin strips instead of leaving them their equal share. */}
         <AnimatePresence>
           {showTranscript && (
             <motion.div
-              initial={{ opacity: 0, width: 0 }}
-              animate={{ opacity: 1, width: 360 }}
-              exit={{ opacity: 0, width: 0 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
               transition={{ duration: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
-              className="my-6 mr-6 flex shrink-0 flex-col overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl"
+              className="mx-4 mb-4 flex min-h-[220px] w-[calc(100%-2rem)] shrink-0 flex-col overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl sm:mx-6 sm:mb-6 sm:w-[calc(100%-3rem)] lg:my-6 lg:mr-6 lg:ml-0 lg:min-h-0 lg:w-[360px]"
             >
               <div className="flex h-11 shrink-0 items-center border-b border-white/10 px-4">
                 <Label className="text-white/50">Live captions</Label>
@@ -337,7 +368,7 @@ export function CallScreen() {
                           m.mine ? "bg-brand/25 text-white" : "bg-white/10 text-white",
                         )}
                       >
-                        <Text size="caption" weight="bold" className="text-white/60">{m.sender}</Text>
+                        <Text size="caption" weight="bold" className="text-white/60">{m.mine ? "You" : persona.name}</Text>
                         <Text as="div" size="body" leading="snug" className="mt-0.5 text-white/90">{m.text}</Text>
                       </div>
                     </motion.div>
@@ -360,7 +391,7 @@ export function CallScreen() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="absolute inset-0 z-50 flex items-center justify-center bg-ink/70 backdrop-blur-md"
+            className="absolute inset-0 z-50 flex items-center justify-center bg-ink/70 p-4 backdrop-blur-md"
           >
             <AnimatePresence mode="wait">
               {phase === "wrap" ? (
@@ -381,7 +412,7 @@ export function CallScreen() {
                   initial={{ opacity: 0, y: 12, scale: 0.96 }}
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
-                  className="flex w-[440px] flex-col items-center gap-5 rounded-card border border-white/15 bg-white/10 px-8 py-8 text-center shadow-modal backdrop-blur-xl"
+                  className="flex w-full max-w-[440px] flex-col items-center gap-5 rounded-card border border-white/15 bg-white/10 px-5 py-7 text-center shadow-modal backdrop-blur-xl sm:px-8 sm:py-8"
                 >
                   <SwishxMark className="size-9 text-white drop-shadow-lg" />
                   <Label className="text-white/80 drop-shadow-lg">Analysis complete</Label>
@@ -390,8 +421,8 @@ export function CallScreen() {
                     <Chip size="sm" tone="dark" iconLeft={<Pill className="size-3" />}>
                       {drug.name.toUpperCase()} · {indication.label.toUpperCase()}
                     </Chip>
-                    <Chip size="sm" tone="dark" iconLeft={<img src={DOCTOR_PHOTO_URL} alt="" className="size-3.5 rounded-full object-cover" />}>
-                      DR. ALEX REYES
+                    <Chip size="sm" tone="dark" iconLeft={<img src={persona.photo} alt="" className="size-3.5 rounded-full object-cover" />}>
+                      {persona.name.toUpperCase()}
                     </Chip>
                     <Chip size="sm" tone="dark">{moodInfo.label.toUpperCase()}</Chip>
                     <Chip size="sm" tone="dark" iconLeft={<Clock className="size-3" />}>
@@ -437,9 +468,9 @@ export function CallScreen() {
         }
       >
         <div className="flex flex-col gap-4">
-          <div className="flex gap-1.5">
-            <Chip tone="brand" size="md">Skeptical</Chip>
-            <Chip size="md">Standard · 4 min</Chip>
+          <div className="flex flex-wrap gap-1.5">
+            <Chip tone="brand" size="md">{moodInfo.label}</Chip>
+            <Chip size="md">{durationInfo.label} · {durationInfo.time}</Chip>
           </div>
           <div>
             <Label tone="brand-deep" className="block">{drug.name} · {indication.label}</Label>

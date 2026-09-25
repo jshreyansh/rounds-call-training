@@ -1,16 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Search, Check } from "lucide-react";
+import { Pencil, Pill, Search, Syringe, Wind, Check } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Text, Label } from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Field } from "@/components/ui/field";
-import { Segmented, SegmentedButton } from "@/components/patterns/segmented";
 import { SwishxLogo } from "@/components/brand/logo";
 import { useCallStore } from "@/store/call-store";
-import { CALLEE_ROLES, DOCTOR_NAME, DURATIONS, MOODS, PRODUCTS, initialsOf } from "@/data/products";
+import { CALLEE_ROLES, DURATIONS, MOODS, PRODUCTS, initialsOf } from "@/data/products";
 
 const FREE_EMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
 
@@ -137,33 +136,12 @@ function OverflowChips({
   );
 }
 
-/** A three-way segmented pick, same control family as the role and
- *  mood chips above it — dropped the slider entirely rather than keep
- *  fighting native range-input styling for something that's really just
- *  a pick-one-of-three. */
-function DurationPicker({
-  value, onChange,
-}: {
-  value: string;
-  onChange: (id: (typeof DURATIONS)[number]["id"]) => void;
-}) {
-  return (
-    <Segmented className="max-w-[360px]">
-      {DURATIONS.map((d) => {
-        const active = d.id === value;
-        return (
-          <SegmentedButton key={d.id} active={active} onClick={() => onChange(d.id)}>
-            <span className={cn("text-label font-bold", active ? "text-brand-deep" : "text-ink-3")}>
-              {d.label}
-            </span>
-            <span className={cn("text-micro font-medium", active ? "text-brand-deep/70" : "text-ink-4")}>
-              {d.time}
-            </span>
-          </SegmentedButton>
-        );
-      })}
-    </Segmented>
-  );
+/** A stand-in for a real product photo — a route-appropriate icon on a
+ *  tinted circle, in place of the plain two-letter initials, without
+ *  pulling in an actual (and possibly copyrighted) stock photo. */
+function RouteIcon({ route, className }: { route: string; className?: string }) {
+  const Icon = route.includes("Oral") ? Pill : route.includes("Inhaled") ? Wind : Syringe;
+  return <Icon className={className} />;
 }
 
 export function SetupScreen() {
@@ -194,7 +172,10 @@ export function SetupScreen() {
 
   function pickDrug(id: string) {
     const drug = PRODUCTS.find((d) => d.id === id)!;
-    store.setProduct(id, drug.indications.length === 1 ? drug.indications[0].id : null);
+    // The first indication is always the recommended default — no reason
+    // to make picking a drug a two-click affair when one of those clicks
+    // has an obvious answer.
+    store.setProduct(id, drug.indications[0].id);
     setSearchActive(false);
     setQuery("");
   }
@@ -204,7 +185,7 @@ export function SetupScreen() {
     setQuery("");
   }
 
-  const calleeRoleLabel = CALLEE_ROLES.find((r) => r.id === store.calleeRole)!.label;
+  const calleeRoleInfo = CALLEE_ROLES.find((r) => r.id === store.calleeRole)!;
   const moodLabel = MOODS.find((m) => m.id === store.mood)!.label;
   const durationInfo = DURATIONS.find((d) => d.id === store.duration)!;
 
@@ -239,18 +220,18 @@ export function SetupScreen() {
 
   return (
     <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-canvas">
-      <div className="flex h-11 shrink-0 items-center justify-between border-b border-hair px-10">
-        <div className="flex items-center gap-3">
-          <SwishxLogo className="h-5 w-auto" />
-          <div className="h-4 w-px bg-hair" />
-          <Text size="body-lg" weight="bold">AI Sales Roleplay Setup</Text>
+      <div className="flex h-11 shrink-0 items-center justify-between border-b border-hair px-4 sm:px-6 lg:px-10">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <SwishxLogo className="h-5 w-auto shrink-0" />
+          <div className="h-4 w-px shrink-0 bg-hair" />
+          <Text size="body-lg" weight="bold" truncate>AI Sales Roleplay Setup</Text>
         </div>
-        <Text size="body" tone="subtle">New practice call</Text>
+        <Text size="body" tone="subtle" className="hidden shrink-0 sm:block">New practice call</Text>
       </div>
 
-      <div className="flex min-h-0 flex-1 gap-4 overflow-y-auto px-5 pb-28 pt-5">
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-28 pt-4 sm:px-5 sm:pt-5 lg:flex-row">
         {/* The form itself */}
-        <div className="flex flex-1 flex-col gap-3">
+        <div className="order-2 flex w-full flex-1 flex-col gap-5 lg:order-1">
           {/* Q1 — product */}
           <div className="relative z-10 rounded-card border border-hair bg-card p-4 shadow-hair">
             <DoneBadge done={hasProduct} />
@@ -292,7 +273,7 @@ export function SetupScreen() {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: -4, scale: 0.99 }}
                       transition={{ duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
-                      className="absolute left-0 top-[54px] z-20 w-[480px] overflow-hidden rounded-panel border border-hair bg-card shadow-float"
+                      className="absolute left-0 top-[54px] z-20 w-full overflow-hidden rounded-panel border border-hair bg-card shadow-float"
                     >
                       {searchResults.length === 0 && (
                         <div className="p-4">
@@ -306,8 +287,8 @@ export function SetupScreen() {
                           onClick={() => pickDrug(r.id)}
                           className="focus-ring flex w-full items-center gap-3 border-b border-hair px-3.5 py-2.5 text-left hover:bg-subtle"
                         >
-                          <span className="flex size-8 shrink-0 items-center justify-center rounded-control bg-ink font-semibold text-body text-white">
-                            {initialsOf(r.name)}
+                          <span className="flex size-8 shrink-0 items-center justify-center rounded-control bg-tint text-brand-deep">
+                            <RouteIcon route={r.route} className="size-4" />
                           </span>
                           <span className="min-w-0 flex-1">
                             <Text as="div" size="body-lg" weight="bold" truncate>{r.name}</Text>
@@ -323,50 +304,67 @@ export function SetupScreen() {
             )}
 
             {drugChosen && (
-              // One compact row, not a stacked section: the indication
-              // choice sits right next to the product info it belongs to,
-              // so it's never a second, easy-to-miss step below the fold.
-              <div className="flex w-full flex-wrap items-center gap-x-4 gap-y-2 rounded-panel border border-hair-2 bg-subtle px-3.5 py-3">
-                <span className="flex size-10 shrink-0 items-center justify-center rounded-control bg-ink text-body-lg font-semibold text-white">
-                  {initialsOf(selectedDrug!.name)}
+              // Two rows, not one wide one: the name sits top-left where
+              // the eye already is after picking a drug, and the thing to
+              // act on next — the indication — sits directly under it, in
+              // the same reading path. The generic/company/route line is
+              // reference info, not something to act on, so it's the one
+              // pushed right. The edit control is an absolutely-positioned
+              // icon in the corner rather than a flex sibling next to the
+              // reference line — a text "Change" sharing that flex row
+              // fought the reference line for width and could visually
+              // collide with it once the line ran long, and the icon is
+              // more compact besides.
+              <div className="relative flex w-full items-start gap-3.5 rounded-panel border border-hair-2 bg-subtle py-3 pl-3.5 pr-11">
+                <span className="flex size-10 shrink-0 items-center justify-center rounded-control bg-tint text-brand-deep">
+                  <RouteIcon route={selectedDrug!.route} className="size-4.5" />
                 </span>
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-1.5">
-                    <Text size="body-lg" weight="bold">{selectedDrug!.name}</Text>
-                    <span className="inline-flex items-center gap-1 rounded-chip bg-ok-bg px-1.5 py-0.5 text-micro font-bold uppercase tracking-wide text-ok">
-                      <Check className="size-2.5" /> Label current
-                    </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <Text size="body-lg" weight="bold">{selectedDrug!.name}</Text>
+                      <span className="inline-flex items-center gap-1 rounded-chip bg-ok-bg px-1.5 py-0.5 text-micro font-bold uppercase tracking-wide text-ok">
+                        <Check className="size-2.5" /> Label current
+                      </span>
+                    </div>
+                    <Text size="caption" tone="subtle">
+                      {selectedDrug!.generic} · {selectedDrug!.company} · {selectedDrug!.route}
+                    </Text>
                   </div>
-                  <Text as="div" size="caption" tone="subtle">
-                    {selectedDrug!.generic} · {selectedDrug!.company} · {selectedDrug!.route}
-                  </Text>
+
+                  {/* The first indication is picked for you (labeled, not
+                      silent) the moment the drug is — one less required
+                      click, and still obviously changeable. */}
+                  {selectedDrug!.indications.length > 1 ? (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {selectedDrug!.indications.map((ind, i) => (
+                        <Chip
+                          key={ind.id}
+                          size="sm"
+                          selected={ind.id === store.indicationId}
+                          tone="brand"
+                          onClick={() => store.setProduct(selectedDrug!.id, ind.id)}
+                        >
+                          {ind.id === store.indicationId && <Check className="size-2.5" />}
+                          {ind.label}
+                          {i === 0 && " (Recommended)"}
+                        </Chip>
+                      ))}
+                    </div>
+                  ) : (
+                    <Text as="div" size="body" tone="subtle" className="mt-1.5">
+                      {selectedDrug!.indications[0].label}
+                    </Text>
+                  )}
                 </div>
 
-                {selectedDrug!.indications.length > 1 ? (
-                  <div className="flex flex-wrap items-center gap-1.5 border-l border-hair-2 pl-4">
-                    {selectedDrug!.indications.map((ind) => (
-                      <Chip
-                        key={ind.id}
-                        size="sm"
-                        selected={ind.id === store.indicationId}
-                        tone="brand"
-                        onClick={() => store.setProduct(selectedDrug!.id, ind.id)}
-                      >
-                        {ind.id === store.indicationId && <Check className="size-2.5" />}
-                        {ind.label}
-                      </Chip>
-                    ))}
-                  </div>
-                ) : (
-                  <Text size="body" tone="subtle" className="border-l border-hair-2 pl-4">
-                    {selectedDrug!.indications[0].label}
-                  </Text>
-                )}
-
-                <button type="button" onClick={resetProduct} className="focus-ring ml-auto shrink-0">
-                  <Text size="label" weight="semibold" tone="brand-deep" className="cursor-pointer">
-                    Change
-                  </Text>
+                <button
+                  type="button"
+                  onClick={resetProduct}
+                  aria-label="Change product"
+                  className="focus-ring absolute right-2.5 top-2.5 flex size-7 items-center justify-center rounded-full text-ink-3 hover:bg-card hover:text-brand-deep"
+                >
+                  <Pencil className="size-3.5" />
                 </button>
               </div>
             )}
@@ -390,12 +388,12 @@ export function SetupScreen() {
                 one. */}
             <div className="flex flex-col gap-6 pl-9">
               <div>
-                <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Who are you calling</Text>
+                <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Who are you calling?</Text>
                 <OverflowChips items={CALLEE_ROLES} value={store.calleeRole} onChange={(v) => store.setCalleeRole(v as typeof store.calleeRole)} />
               </div>
 
               <div>
-                <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Select in what mood are they</Text>
+                <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Select in what mood are they?</Text>
                 <div className="flex flex-wrap gap-2">
                   {MOODS.map((m) => (
                     <Chip
@@ -417,8 +415,24 @@ export function SetupScreen() {
               </div>
 
               <div>
-                <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">How much time do you have</Text>
-                <DurationPicker value={store.duration} onChange={store.setDuration} />
+                <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">How much time do you have?</Text>
+                {/* Same flat chip family as the two questions above it,
+                    not a segmented control — one less visual pattern to
+                    learn, and a lot less vertical space than the old
+                    stacked label-over-time boxes. */}
+                <div className="flex flex-wrap gap-2">
+                  {DURATIONS.map((d) => (
+                    <Chip
+                      key={d.id}
+                      size="lg"
+                      selected={d.id === store.duration}
+                      tone="brand"
+                      onClick={() => store.setDuration(d.id)}
+                    >
+                      {d.label} · {d.time}
+                    </Chip>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -426,23 +440,36 @@ export function SetupScreen() {
           {/* Q3 — email */}
           <div className="relative rounded-card border border-hair bg-card p-4 shadow-hair">
             <DoneBadge done={hasValidEmail && store.consented} />
-            <div className="mb-2 flex items-baseline gap-3">
-              <StepMark done={hasValidEmail && store.consented} mark="3" />
-              <Text as="div" size="title" weight="medium" className="italic">
-                Add your email for the debrief.
-              </Text>
+            {/* The field rides the same line as the question rather than
+                a row of its own below it — the question is short enough
+                that there's room, and it reads as one ask instead of a
+                heading followed by a separate form field. */}
+            <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+              <div className="flex items-baseline gap-3">
+                <StepMark done={hasValidEmail && store.consented} mark="3" />
+                <Text as="div" size="title" weight="medium" className="italic">
+                  Add your email for the debrief.
+                </Text>
+              </div>
+              {/* Field's own wrapper is a hardcoded w-full, which — in a
+                  wrapped flex row — always claims the whole row's width
+                  and forces itself onto its own line no matter what
+                  className reaches the input inside it. A fixed-width,
+                  non-growing wrapper around it is what actually keeps it
+                  beside the heading. */}
+              <div className="w-[280px] shrink-0">
+                <Field
+                  type="email"
+                  aria-label="Work email"
+                  placeholder="you@company.com"
+                  size="sm"
+                  error={emailError}
+                  value={store.email}
+                  onChange={(e) => store.setEmail(e.target.value)}
+                />
+              </div>
             </div>
             <div className="mt-3 flex flex-wrap items-start gap-4 pl-9">
-              <Field
-                type="email"
-                aria-label="Work email"
-                placeholder="you@company.com"
-                size="sm"
-                className="w-[280px]"
-                error={emailError}
-                value={store.email}
-                onChange={(e) => store.setEmail(e.target.value)}
-              />
               <button
                 type="button"
                 onClick={store.toggleConsent}
@@ -466,13 +493,20 @@ export function SetupScreen() {
 
         {/* Who you're about to meet — a profile card, not a data sheet.
             The persona plays on loop here (muted, so it never fights the
-            call audio); every other screen still uses the plain still
-            photo. The details ride a frosted glass panel rising from the
+            call audio), and swaps with the role picked above — a keyed
+            remount rather than just changing `src`, since some browsers
+            won't reload an already-playing video on a bare src change.
+            Every other screen uses the matching still photo instead.
+            The details ride a frosted glass panel rising from the
             bottom, the way a share-profile card works, rather than
-            sitting on a plain white sheet. */}
-        <div className="relative flex h-[560px] w-[350px] shrink-0 self-start flex-col overflow-hidden rounded-card border border-hair shadow-hair">
+            sitting on a plain white sheet. Sits above the form on
+            mobile/tablet as a shorter horizontal banner — the full tall
+            portrait card only fits once there's a side column to put it
+            in, at lg+. */}
+        <div className="order-1 relative flex h-[280px] w-full shrink-0 flex-col overflow-hidden rounded-card border border-hair shadow-hair sm:h-[320px] lg:order-2 lg:h-[560px] lg:w-[350px] lg:self-start">
           <video
-            src="/doctor-video.mp4"
+            key={calleeRoleInfo.id}
+            src={calleeRoleInfo.video}
             autoPlay
             loop
             muted
@@ -513,15 +547,15 @@ export function SetupScreen() {
 
           <div className="flex-1" />
 
-          <div className="relative z-10 flex flex-col gap-2.5 p-4 pt-2">
+          <div className="relative z-10 flex flex-col gap-2 p-4 pt-2 sm:gap-2.5">
             <div>
               <div className="flex items-center gap-1.5">
-                <Text size="subhead" weight="bold">{DOCTOR_NAME}</Text>
+                <Text size="subhead" weight="bold">{calleeRoleInfo.name}</Text>
                 <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-ok text-white">
                   <Check className="size-2.5" />
                 </span>
               </div>
-              <Text size="body" tone="subtle">{calleeRoleLabel}</Text>
+              <Text size="body" tone="subtle">{calleeRoleInfo.label}</Text>
             </div>
 
             <div className="flex flex-wrap gap-1.5">
@@ -529,11 +563,15 @@ export function SetupScreen() {
               <Chip size="sm">{durationInfo.label} · {durationInfo.time}</Chip>
             </div>
 
-            <div className="h-px bg-hair" />
-
-            <Text size="caption" tone="subtle" leading="snug">
-              Every claim gets checked against the current FDA label.
-            </Text>
+            {/* Cut on shorter cards (mobile/tablet) — the trust line is a
+                nice-to-have footnote, not something worth squeezing the
+                name and chips above it for. */}
+            <div className="hidden flex-col gap-2.5 sm:flex">
+              <div className="h-px bg-hair" />
+              <Text size="caption" tone="subtle" leading="snug">
+                Every claim gets checked against the current FDA label.
+              </Text>
+            </div>
           </div>
         </div>
       </div>

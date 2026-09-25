@@ -79,14 +79,20 @@ export const PRODUCTS: Product[] = [
 /** Who the rep is calling — this drives how the persona treats the pitch
  *  (a formulary conversation reads very differently from a bedside one),
  *  so it's asked directly rather than inferred from a specialty. Fixed
- *  regardless of product, unlike the old specialty list. */
+ *  regardless of product, unlike the old specialty list. Each role carries
+ *  its own name, looping video (Setup's profile card) and still photo
+ *  (the video's poster frame, and everywhere a static image is needed —
+ *  the call stage, the report), so switching roles swaps who you're
+ *  meeting everywhere that persona shows up, not just on one screen. */
 export const CALLEE_ROLES = [
-  { id: "doctor", label: "Doctor" },
-  { id: "decision-maker", label: "Decision Maker" },
-  { id: "patient", label: "Patient" },
-  { id: "caregiver", label: "Caregiver" },
-  { id: "pharmacist", label: "Pharmacist" },
+  { id: "doctor", label: "Doctor", name: "Dr. Alex Reyes", video: "/doctor-video.mp4", photo: "/doctor-photo.jpg" },
+  { id: "decision-maker", label: "Decision Maker", name: "Martin Cole", video: "/persona-decision-maker.mp4", photo: "/persona-decision-maker.jpg" },
+  { id: "patient", label: "Patient", name: "Emma Sutter", video: "/persona-patient.mp4", photo: "/persona-patient.webp" },
+  { id: "caregiver", label: "Caregiver", name: "Priya Nair", video: "/persona-caregiver.mp4", photo: "/persona-caregiver.png" },
+  { id: "pharmacist", label: "Pharmacist", name: "Marcus Bennett", video: "/persona-pharmacist.mp4", photo: "/persona-pharmacist.jpg" },
 ] as const;
+
+export type CalleeRole = (typeof CALLEE_ROLES)[number];
 
 export const MOODS = [
   { id: "friendly", label: "Friendly", emoji: "🙂" },
