@@ -76,51 +76,17 @@ export const PRODUCTS: Product[] = [
   },
 ];
 
-/** The full pool a product's relevant-specialty list is drawn from. Kept
- *  as one flat list (rather than a type per product) so a specialty
- *  chosen under one product still resolves to a label if the product
- *  changes later. */
-export const SPECIALTIES = [
-  { id: "endo", label: "Endocrinology" },
-  { id: "cards", label: "Cardiology" },
-  { id: "onc", label: "Oncology" },
-  { id: "im", label: "Internal Medicine" },
-  { id: "np", label: "Nurse Practitioner" },
-  { id: "fm", label: "Family Medicine" },
-  { id: "neph", label: "Nephrology" },
-  { id: "pa", label: "Physician Assistant" },
-  { id: "obm", label: "Obesity Medicine" },
-  { id: "geri", label: "Geriatrics" },
-  { id: "bs", label: "Bariatric Surgery" },
-  { id: "hemonc", label: "Hematology-Oncology" },
-  { id: "surgonc", label: "Surgical Oncology" },
-  { id: "radonc", label: "Radiation Oncology" },
-  { id: "palliative", label: "Palliative Care" },
-  { id: "pulm", label: "Pulmonology" },
-  { id: "allergy", label: "Allergy & Immunology" },
-  { id: "derm", label: "Dermatology" },
-  { id: "rheum", label: "Rheumatology" },
-  { id: "psych", label: "Psychiatry" },
+/** Who the rep is calling — this drives how the persona treats the pitch
+ *  (a formulary conversation reads very differently from a bedside one),
+ *  so it's asked directly rather than inferred from a specialty. Fixed
+ *  regardless of product, unlike the old specialty list. */
+export const CALLEE_ROLES = [
+  { id: "doctor", label: "Doctor" },
+  { id: "decision-maker", label: "Decision Maker" },
+  { id: "patient", label: "Patient" },
+  { id: "caregiver", label: "Caregiver" },
+  { id: "pharmacist", label: "Pharmacist" },
 ] as const;
-
-/** Which specialties are plausibly relevant to each product — swapped in
- *  (with a brief shimmer) once the product and indication resolve, rather
- *  than showing one fixed list regardless of what's being discussed. */
-const SPECIALTIES_BY_PRODUCT: Record<string, readonly string[]> = {
-  glucovya: ["endo", "im", "fm", "cards", "neph", "obm", "np", "pa", "geri", "bs"],
-  nephralin: ["neph", "im", "cards", "endo", "geri", "np", "pa", "fm"],
-  cardivyn: ["cards", "im", "np", "pa", "fm", "neph", "geri", "endo"],
-  oncovera: ["onc", "hemonc", "surgonc", "radonc", "palliative", "np", "pa", "im"],
-  pulmorase: ["pulm", "allergy", "im", "fm", "np", "pa", "geri", "cards"],
-  dermaclarix: ["derm", "rheum", "im", "np", "pa", "fm", "allergy", "psych"],
-};
-
-const DEFAULT_SPECIALTY_IDS = ["endo", "cards", "onc", "im", "np"];
-
-export function specialtiesForProduct(productId: string | null) {
-  const ids = (productId && SPECIALTIES_BY_PRODUCT[productId]) || DEFAULT_SPECIALTY_IDS;
-  return ids.map((id) => SPECIALTIES.find((s) => s.id === id)!);
-}
 
 export const MOODS = [
   { id: "friendly", label: "Friendly", emoji: "🙂" },

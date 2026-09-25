@@ -7,12 +7,10 @@ import { Text, Label } from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Field } from "@/components/ui/field";
+import { Segmented, SegmentedButton } from "@/components/patterns/segmented";
 import { SwishxLogo } from "@/components/brand/logo";
 import { useCallStore } from "@/store/call-store";
-import {
-  DOCTOR_NAME, DURATIONS, MOODS, PRODUCTS, SPECIALTIES, initialsOf,
-  specialtiesForProduct,
-} from "@/data/products";
+import { CALLEE_ROLES, DOCTOR_NAME, DURATIONS, MOODS, PRODUCTS, initialsOf } from "@/data/products";
 
 const FREE_EMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
 
@@ -49,8 +47,8 @@ function DoneBadge({ done }: { done: boolean }) {
 
 /**
  * A chip row that measures its own available width and collapses to a
- * "+N" affordance rather than letting five specialty labels wrap
- * unpredictably. Clicking it reveals the rest, wrapping onto a second row —
+ * "+N" affordance rather than letting a longer label like "Decision Maker"
+ * force an unpredictable wrap. Clicking it reveals the rest, wrapping onto a second row —
  * everything below just flows down with it, since this is plain layout,
  * not an overlay.
  */
@@ -139,63 +137,32 @@ function OverflowChips({
   );
 }
 
-/** A 3-stop discrete slider — deliberately not a fourth chip row, so the
- *  call-length control reads differently from the two pick-one-of-a-set
- *  questions above it. */
-function DurationSlider({
+/** A three-way segmented pick, same control family as the role and
+ *  mood chips above it — dropped the slider entirely rather than keep
+ *  fighting native range-input styling for something that's really just
+ *  a pick-one-of-three. */
+function DurationPicker({
   value, onChange,
 }: {
   value: string;
   onChange: (id: (typeof DURATIONS)[number]["id"]) => void;
 }) {
-  const index = Math.max(0, DURATIONS.findIndex((d) => d.id === value));
-  const pct = (index / (DURATIONS.length - 1)) * 100;
-
   return (
-    <div className="max-w-[260px]">
-      <div className="relative flex items-center">
-        <input
-          type="range"
-          min={0}
-          max={DURATIONS.length - 1}
-          step={1}
-          value={index}
-          onChange={(e) => onChange(DURATIONS[Number(e.target.value)].id)}
-          aria-label="Call length"
-          className={cn(
-            "h-1.5 w-full cursor-pointer appearance-none rounded-full",
-            "[&::-webkit-slider-thumb]:size-4.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-card [&::-webkit-slider-thumb]:bg-brand [&::-webkit-slider-thumb]:shadow-brand-lift",
-            "[&::-moz-range-thumb]:size-4.5 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-card [&::-moz-range-thumb]:bg-brand",
-          )}
-          style={{
-            background: `linear-gradient(to right, var(--color-brand) ${pct}%, var(--color-subtle) ${pct}%)`,
-          }}
-        />
-        {/* Stop markers on the track itself, so each of the three valid
-            positions reads as a clickable target up close, not just a
-            point somewhere along an otherwise-blank bar. */}
-        <div className="pointer-events-none absolute inset-x-0 flex items-center justify-between">
-          {DURATIONS.map((d) => (
-            <span key={d.id} className="size-1.5 rounded-full border-2 border-white bg-ink-3/60" />
-          ))}
-        </div>
-      </div>
-      <div className="mt-2 flex justify-between">
-        {DURATIONS.map((d, i) => (
-          <button
-            key={d.id}
-            type="button"
-            onClick={() => onChange(d.id)}
-            className="focus-ring flex flex-col items-center gap-0.5 px-1"
-          >
-            <Text size="caption" weight={i === index ? "bold" : "medium"} tone={i === index ? "brand-deep" : "subtle"}>
+    <Segmented className="max-w-[360px]">
+      {DURATIONS.map((d) => {
+        const active = d.id === value;
+        return (
+          <SegmentedButton key={d.id} active={active} onClick={() => onChange(d.id)}>
+            <span className={cn("text-label font-bold", active ? "text-brand-deep" : "text-ink-3")}>
               {d.label}
-            </Text>
-            <Text size="micro" tone="faint">{d.time}</Text>
-          </button>
-        ))}
-      </div>
-    </div>
+            </span>
+            <span className={cn("text-micro font-medium", active ? "text-brand-deep/70" : "text-ink-4")}>
+              {d.time}
+            </span>
+          </SegmentedButton>
+        );
+      })}
+    </Segmented>
   );
 }
 
@@ -237,32 +204,7 @@ export function SetupScreen() {
     setQuery("");
   }
 
-  const resolvedProductKey = hasProduct ? selectedDrug!.id : null;
-  const [specialtyOptions, setSpecialtyOptions] = useState(() => specialtiesForProduct(null));
-  const [specialtyLoading, setSpecialtyLoading] = useState(false);
-
-  useEffect(() => {
-    // Only reshuffle once the product question is actually resolved (drug
-    // and indication both chosen) — that's the moment "who I'm calling"
-    // is final enough to imply which specialties are plausible.
-    if (!resolvedProductKey) {
-      setSpecialtyOptions(specialtiesForProduct(null));
-      setSpecialtyLoading(false);
-      return;
-    }
-    setSpecialtyLoading(true);
-    const t = setTimeout(() => {
-      const next = specialtiesForProduct(resolvedProductKey);
-      setSpecialtyOptions(next);
-      setSpecialtyLoading(false);
-      if (!next.some((s) => s.id === useCallStore.getState().specialty)) {
-        useCallStore.getState().setSpecialty(next[0].id as never);
-      }
-    }, 700);
-    return () => clearTimeout(t);
-  }, [resolvedProductKey]);
-
-  const specialtyLabel = SPECIALTIES.find((s) => s.id === store.specialty)!.label;
+  const calleeRoleLabel = CALLEE_ROLES.find((r) => r.id === store.calleeRole)!.label;
   const moodLabel = MOODS.find((m) => m.id === store.mood)!.label;
   const durationInfo = DURATIONS.find((d) => d.id === store.duration)!;
 
@@ -319,11 +261,15 @@ export function SetupScreen() {
               </Text>
             </div>
 
-            {/* A fixed-height slot for whichever state is showing, so
-                resolving the product never shifts every card below it
-                down the page — the empty search state just gets to
-                breathe a little more inside the same footprint. */}
-            <div className="flex min-h-[76px] items-center">
+            {/* Indented to the same left edge as the heading text (past
+                the step-number circle + its gap), not the card's own
+                padding edge — otherwise the number reads as part of the
+                body content instead of a marker beside it. A fixed-height
+                slot for whichever state is showing, so resolving the
+                product never shifts every card below it down the page —
+                the empty search state just gets to breathe a little more
+                inside the same footprint. */}
+            <div className="flex min-h-[76px] items-center pl-9">
             {!drugChosen && (
               <div className="relative w-full max-w-[520px]">
                 <Field
@@ -437,22 +383,19 @@ export function SetupScreen() {
               </Text>
             </div>
 
-            <div className="flex flex-col gap-3">
+            {/* Same left indent as Q1 and Q3's body — aligned under the
+                heading text, not the step-number circle. Generous gap
+                between the three questions here specifically, since this
+                is the one card carrying three separate asks rather than
+                one. */}
+            <div className="flex flex-col gap-6 pl-9">
               <div>
-                <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Specialty</Text>
-                {specialtyLoading ? (
-                  <div className="flex gap-2">
-                    {[72, 88, 84, 96, 78].map((w, i) => (
-                      <div key={i} className="shimmer h-[30px] rounded-chip" style={{ width: w }} />
-                    ))}
-                  </div>
-                ) : (
-                  <OverflowChips items={specialtyOptions} value={store.specialty} onChange={(v) => store.setSpecialty(v as typeof store.specialty)} />
-                )}
+                <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Who are you calling</Text>
+                <OverflowChips items={CALLEE_ROLES} value={store.calleeRole} onChange={(v) => store.setCalleeRole(v as typeof store.calleeRole)} />
               </div>
 
               <div>
-                <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">How will they receive you</Text>
+                <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Select in what mood are they</Text>
                 <div className="flex flex-wrap gap-2">
                   {MOODS.map((m) => (
                     <Chip
@@ -475,7 +418,7 @@ export function SetupScreen() {
 
               <div>
                 <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">How much time do you have</Text>
-                <DurationSlider value={store.duration} onChange={store.setDuration} />
+                <DurationPicker value={store.duration} onChange={store.setDuration} />
               </div>
             </div>
           </div>
@@ -489,7 +432,7 @@ export function SetupScreen() {
                 Add your email for the debrief.
               </Text>
             </div>
-            <div className="mt-3 flex flex-wrap items-start gap-4">
+            <div className="mt-3 flex flex-wrap items-start gap-4 pl-9">
               <Field
                 type="email"
                 aria-label="Work email"
@@ -578,7 +521,7 @@ export function SetupScreen() {
                   <Check className="size-2.5" />
                 </span>
               </div>
-              <Text size="body" tone="subtle">{specialtyLabel}</Text>
+              <Text size="body" tone="subtle">{calleeRoleLabel}</Text>
             </div>
 
             <div className="flex flex-wrap gap-1.5">

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, Ear, Info, Mic, MicOff, PhoneOff, Volume2, X } from "lucide-react";
+import { ArrowLeft, Clock, Ear, Info, Mic, MicOff, PhoneOff, Pill, Volume2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Text, Label } from "@/components/ui/text";
 import { Button, IconButton } from "@/components/ui/button";
@@ -9,7 +9,7 @@ import { Chip } from "@/components/ui/chip";
 import { Sheet } from "@/components/patterns/sheet";
 import { SwishxMark } from "@/components/brand/logo";
 import { useCallStore } from "@/store/call-store";
-import { DOCTOR_NAME, DOCTOR_PHOTO_URL, PRODUCTS } from "@/data/products";
+import { DOCTOR_NAME, DOCTOR_PHOTO_URL, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
 
 type Phase = "connecting" | "live" | "wrap" | "ready";
 type Speaker = "doctor" | "rep";
@@ -25,6 +25,11 @@ const TRANSCRIPT = [
   { sender: DOCTOR_NAME, mine: false, at: 22, text: "And the GI tolerability? That's where I lose patients on this class." },
   { sender: "You", mine: true, at: 27, text: "This is basically guaranteed to help with weight loss too, and there's really no risk of pancreatitis with this one." },
 ];
+
+/** Matches the demo score Report lands on after its own reveal animation
+ *  — shown here already-settled, since by "Analysis complete" the score
+ *  is done, not still counting up. */
+const DEMO_SCORE = 82;
 
 function formatTime(totalSeconds: number) {
   const mm = Math.floor(totalSeconds / 60);
@@ -56,11 +61,36 @@ function levelGlow(level: number) {
   return `0 0 0 ${edge}px rgba(253,72,22,${edgeAlpha}), 0 0 ${blur}px ${spread}px rgba(253,72,22,${glowAlpha})`;
 }
 
+function SpeakingBadge({ size = "md" }: { size?: "sm" | "md" }) {
+  const sm = size === "sm";
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className={cn(
+        "absolute flex items-center gap-1 rounded-full bg-black/50 font-semibold text-live",
+        sm ? "right-2.5 top-2.5 px-2 py-0.5 text-micro" : "right-4 top-4 px-2.5 py-1 text-micro",
+      )}
+    >
+      <motion.span
+        className="flex items-center"
+        animate={{ scale: [1, 1.25, 1] }}
+        transition={{ duration: 0.9, repeat: Infinity }}
+      >
+        <Volume2 className={sm ? "size-2.5" : "size-3"} />
+      </motion.span>
+      Speaking
+    </motion.div>
+  );
+}
+
 export function CallScreen() {
   const navigate = useNavigate();
-  const { drugId, indicationId } = useCallStore();
+  const { drugId, indicationId, mood, duration } = useCallStore();
   const drug = PRODUCTS.find((d) => d.id === drugId) ?? PRODUCTS[0];
   const indication = drug.indications.find((i) => i.id === indicationId) ?? drug.indications[0];
+  const moodInfo = MOODS.find((m) => m.id === mood) ?? MOODS[0];
+  const durationInfo = DURATIONS.find((d) => d.id === duration) ?? DURATIONS[0];
 
   const [phase, setPhase] = useState<Phase>("connecting");
   const [briefOpen, setBriefOpen] = useState(false);
@@ -120,6 +150,8 @@ export function CallScreen() {
 
   const dimmed = phase === "wrap" || phase === "ready";
   const showTranscript = phase === "live" || dimmed;
+  const scoreTone = DEMO_SCORE >= 70 ? "ok" : DEMO_SCORE >= 45 ? "warn" : "danger";
+  const scoreDotClass = scoreTone === "ok" ? "bg-ok" : scoreTone === "warn" ? "bg-warn" : "bg-danger";
 
   return (
     <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-ink">
@@ -153,111 +185,92 @@ export function CallScreen() {
       </div>
 
       <div className="relative z-0 flex min-h-0 flex-1">
-        {/* The stage — the tile's own margin is what actually insets it
-            (an absolutely positioned child's containing block is this
-            wrapper's padding edge, so the wrapper's own padding does
-            nothing); it must match the captions panel's margin exactly
-            or their edges read as misaligned. */}
-        <div className="relative min-w-0 flex-1">
-          <div
-            className="absolute inset-0 mx-6 mb-24 mt-6 flex items-center justify-center overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl"
-            style={{ opacity: dimmed ? 0.35 : 1, transition: "opacity 400ms ease" }}
-          >
-            <img
-              src={DOCTOR_PHOTO_URL}
-              alt=""
-              className="size-32 rounded-full object-cover transition-shadow duration-150"
-              style={{ boxShadow: levelGlow(doctorLevel) }}
-            />
-            <div className="absolute bottom-5 left-5 flex items-center gap-2 rounded-full bg-black/50 px-3.5 py-2">
-              <Text size="body-lg" tone="inverse" weight="semibold">{DOCTOR_NAME}</Text>
-              <Text size="body" className="text-white/60">Endocrinology</Text>
-            </div>
-            {phase === "live" && (
-              speaker === "doctor" ? (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="absolute right-4 top-4 flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-micro font-semibold text-live"
-                >
-                  <motion.span
-                    className="flex items-center"
-                    animate={{ scale: [1, 1.25, 1] }}
-                    transition={{ duration: 0.9, repeat: Infinity }}
-                  >
-                    <Volume2 className="size-3" />
-                  </motion.span>
-                  Speaking
-                </motion.div>
-              ) : (
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="absolute right-4 top-4 flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-micro font-semibold text-white/55"
-                >
-                  <Ear className="size-3" />
-                  Listening
-                </motion.div>
-              )
-            )}
-            {phase === "connecting" && (
-              <div className="absolute bottom-5 right-6 flex items-center gap-2 font-mono text-body text-white/60">
-                <span>Calling</span>
-                <motion.span animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1.4, repeat: Infinity }}>&hellip;</motion.span>
-              </div>
-            )}
-          </div>
-
-          {/* The same branded moment as the end-of-call card, bookending
-              the call: the mark appears as it connects, and again once the
-              report is ready. */}
-          <AnimatePresence>
-            {phase === "connecting" && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.35 }}
-                className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3"
-              >
-                <SwishxMark className="size-8 text-white drop-shadow-lg" />
-                <Label className="text-white/80 drop-shadow-lg">Connecting you now</Label>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <div
-            className="absolute bottom-[118px] right-11 flex h-[136px] w-[196px] items-center justify-center rounded-panel border border-white/15 bg-white/10 backdrop-blur-xl transition-opacity duration-300"
-            style={{ opacity: phase === "connecting" ? 0.45 : dimmed ? 0.3 : 1 }}
-          >
+        <div className="relative flex min-w-0 flex-1 flex-col">
+          {/* Two equal tiles, not one dominant tile with the other person
+              floating small in a corner — a call is between two people of
+              equal standing, so the layout should say that. You're in the
+              call from the first frame; the doctor's tile shows its own
+              "still connecting" state until the join actually lands, at
+              which point the join sound plays and the tile swaps to their
+              live presence. */}
+          <div className="flex min-h-0 flex-1 gap-5 px-6 pb-[104px] pt-6">
             <div
-              className="flex size-14 items-center justify-center rounded-full bg-ink-3 text-title font-semibold text-white transition-shadow duration-150"
-              style={{ boxShadow: levelGlow(repLevel) }}
+              className="relative flex-1 overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl"
+              style={{ opacity: dimmed ? 0.35 : 1, transition: "opacity 400ms ease" }}
             >
-              SJ
-            </div>
-            <div className="absolute bottom-2.5 left-2.5 rounded-full bg-black/50 px-2.5 py-1">
-              <Text size="caption" tone="inverse">You</Text>
-            </div>
-            {/* Only ever "Speaking" — never "Listening" for your own tile.
-                Telling a person they're listening to themselves is noise;
-                the indicator only earns its place on the other party. */}
-            {phase === "live" && speaker === "rep" && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                className="absolute right-2.5 top-2.5 flex items-center gap-1 rounded-full bg-black/50 px-2 py-0.5 text-micro font-semibold text-live"
-              >
-                <motion.span
-                  className="flex items-center"
-                  animate={{ scale: [1, 1.25, 1] }}
-                  transition={{ duration: 0.9, repeat: Infinity }}
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <div
+                  className="flex size-28 items-center justify-center rounded-full bg-ink-3 text-display font-semibold text-white transition-shadow duration-150"
+                  style={{ boxShadow: levelGlow(repLevel) }}
                 >
-                  <Volume2 className="size-2.5" />
-                </motion.span>
-                Speaking
-              </motion.div>
-            )}
+                  SJ
+                </div>
+              </div>
+              <div className="absolute bottom-5 left-5 rounded-full bg-black/50 px-3.5 py-2">
+                <Text size="body-lg" tone="inverse" weight="semibold">You</Text>
+              </div>
+              {micMuted && (
+                <div className="absolute right-4 top-4 flex items-center justify-center rounded-full bg-black/50 p-2 text-white/70">
+                  <MicOff className="size-3.5" />
+                </div>
+              )}
+              {phase === "live" && speaker === "rep" && !micMuted && <SpeakingBadge />}
+            </div>
+
+            <div
+              className="relative flex-1 overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl"
+              style={{ opacity: dimmed ? 0.35 : 1, transition: "opacity 400ms ease" }}
+            >
+              <AnimatePresence mode="wait" initial={false}>
+                {phase === "connecting" ? (
+                  <motion.div
+                    key="connecting"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.3 }}
+                    className="absolute inset-0 flex flex-col items-center justify-center gap-3"
+                  >
+                    <SwishxMark className="size-7 text-white/60" />
+                    <div className="flex items-center gap-2 font-mono text-body text-white/60">
+                      <span>Connecting {DOCTOR_NAME}</span>
+                      <motion.span animate={{ opacity: [0.2, 1, 0.2] }} transition={{ duration: 1.4, repeat: Infinity }}>&hellip;</motion.span>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="joined"
+                    initial={{ opacity: 0, scale: 0.94 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
+                    className="absolute inset-0 flex flex-col items-center justify-center"
+                  >
+                    <img
+                      src={DOCTOR_PHOTO_URL}
+                      alt=""
+                      className="size-28 rounded-full object-cover transition-shadow duration-150"
+                      style={{ boxShadow: levelGlow(doctorLevel) }}
+                    />
+                    <div className="absolute bottom-5 left-5 flex items-center gap-2 rounded-full bg-black/50 px-3.5 py-2">
+                      <Text size="body-lg" tone="inverse" weight="semibold">{DOCTOR_NAME}</Text>
+                      <Text size="body" className="text-white/60">Endocrinology</Text>
+                    </div>
+                    {phase === "live" && (speaker === "doctor" ? (
+                      <SpeakingBadge />
+                    ) : (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="absolute right-4 top-4 flex items-center gap-1 rounded-full bg-black/50 px-2.5 py-1 text-micro font-semibold text-white/55"
+                      >
+                        <Ear className="size-3" />
+                        Listening
+                      </motion.div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           <AnimatePresence>
@@ -287,34 +300,6 @@ export function CallScreen() {
                 >
                   <PhoneOff className="size-4.5" />
                 </IconButton>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          <AnimatePresence>
-            {phase === "wrap" && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="absolute bottom-10 left-1/2 flex -translate-x-1/2 items-center gap-2.5 rounded-full border border-white/15 bg-black/50 px-5 py-3"
-              >
-                <span className="size-3.5 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                <Label tone="faint" className="text-white/60">Reviewing your call&hellip;</Label>
-              </motion.div>
-            )}
-            {phase === "ready" && (
-              <motion.div
-                initial={{ opacity: 0, y: 10, scale: 0.96 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
-                className="absolute inset-0 flex flex-col items-center justify-center gap-4"
-              >
-                <SwishxMark className="size-9 text-white drop-shadow-lg" />
-                <Label className="text-white/80 drop-shadow-lg">Analysis complete</Label>
-                <Button size="lg" onClick={() => navigate("/report")} className="shadow-modal">
-                  View your report
-                </Button>
               </motion.div>
             )}
           </AnimatePresence>
@@ -364,6 +349,80 @@ export function CallScreen() {
           )}
         </AnimatePresence>
       </div>
+
+      {/* The wrap-up moment — a proper overlay covering the whole screen
+          (stage, captions, header alike), not a strip tucked into just the
+          presenter area. "Reviewing" and "Analysis complete" are both the
+          same centered layover, one settling into the other. */}
+      <AnimatePresence>
+        {dimmed && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="absolute inset-0 z-50 flex items-center justify-center bg-ink/70 backdrop-blur-md"
+          >
+            <AnimatePresence mode="wait">
+              {phase === "wrap" ? (
+                <motion.div
+                  key="wrap"
+                  initial={{ opacity: 0, scale: 0.96 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.96 }}
+                  transition={{ duration: 0.25 }}
+                  className="flex flex-col items-center gap-3 rounded-card border border-white/15 bg-white/10 px-10 py-8 backdrop-blur-xl"
+                >
+                  <span className="size-6 animate-spin rounded-full border-2 border-white/25 border-t-white" />
+                  <Label className="text-white/70">Reviewing your call&hellip;</Label>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="ready"
+                  initial={{ opacity: 0, y: 12, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.35, ease: [0.2, 0.8, 0.2, 1] }}
+                  className="flex w-[440px] flex-col items-center gap-5 rounded-card border border-white/15 bg-white/10 px-8 py-8 text-center shadow-modal backdrop-blur-xl"
+                >
+                  <SwishxMark className="size-9 text-white drop-shadow-lg" />
+                  <Label className="text-white/80 drop-shadow-lg">Analysis complete</Label>
+
+                  <div className="flex flex-wrap items-center justify-center gap-1.5">
+                    <Chip size="sm" tone="dark" iconLeft={<Pill className="size-3" />}>
+                      {drug.name.toUpperCase()} · {indication.label.toUpperCase()}
+                    </Chip>
+                    <Chip size="sm" tone="dark" iconLeft={<img src={DOCTOR_PHOTO_URL} alt="" className="size-3.5 rounded-full object-cover" />}>
+                      DR. ALEX REYES
+                    </Chip>
+                    <Chip size="sm" tone="dark">{moodInfo.label.toUpperCase()}</Chip>
+                    <Chip size="sm" tone="dark" iconLeft={<Clock className="size-3" />}>
+                      {durationInfo.label.toUpperCase()} CALL · {durationInfo.time.toUpperCase()}
+                    </Chip>
+                  </div>
+
+                  <div className="flex w-full items-center justify-center gap-6 rounded-panel border border-white/10 bg-black/20 px-5 py-4">
+                    <div className="flex flex-col items-center gap-1">
+                      <Label className="text-white/45">Duration</Label>
+                      <Text size="title" weight="bold" tone="inverse" tabular className="font-mono">{formatTime(elapsed)}</Text>
+                    </div>
+                    <div className="h-9 w-px bg-white/15" />
+                    <div className="flex flex-col items-center gap-1">
+                      <Label className="text-white/45">Total score</Label>
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn("size-2 rounded-full", scoreDotClass)} />
+                        <Text size="title" weight="bold" tone="inverse" tabular className="font-mono">{DEMO_SCORE}/100</Text>
+                      </div>
+                    </div>
+                  </div>
+
+                  <Button size="lg" onClick={() => navigate("/report")} className="w-full shadow-modal">
+                    View your report
+                  </Button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <Sheet
         open={briefOpen}
