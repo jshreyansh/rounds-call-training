@@ -1,0 +1,170 @@
+@import "tailwindcss";
+
+/* ─────────────────────────────────────────────────────────────────────
+   Design tokens, ported from "SwishX for biz v101" (src/app/globals.css).
+   Trimmed to what Rounds actually uses — brand, surfaces, ink ramp,
+   status colors, the type scale, radii, elevation and easings. Keep this
+   in step with the source file rather than re-deriving values by eye.
+   ───────────────────────────────────────────────────────────────── */
+@theme static {
+  --color-brand:      #fd4816;
+  --color-brand-2:    #ff8a4c;
+  --color-brand-deep: #b82f0c;
+  --color-brand-ink:  #7a1f06;
+
+  --color-canvas: #fbfaf9;
+  --color-card:   #ffffff;
+  --color-subtle: #f7f8f6;
+
+  --color-ink:   #0a0d14;
+  --color-ink-2: #3c414d;
+  --color-ink-3: #6b7280;
+  --color-ink-4: #9aa0ac;
+
+  --color-hair:   rgba(10,13,20,.08);
+  --color-hair-2: rgba(10,13,20,.14);
+  --color-hair-3: rgba(10,13,20,.22);
+
+  --color-tint:        #fff5f1;
+  --color-tint-2:      #fff9f6;
+  --color-tint-strong: #ffece5;
+  --color-tint-line:   #ffe3d8;
+
+  --color-ok:        #12784a;
+  --color-ok-bg:     #e9f8f0;
+  --color-ok-line:   #c3ebd7;
+  --color-warn:      #a15c07;
+  --color-warn-bg:   #fff5e6;
+  --color-warn-line: #f5dfb8;
+  --color-danger:      #9f3a38;
+  --color-danger-deep: #842e2d;
+  --color-danger-bg:   #fceae8;
+  --color-danger-line: #f2c9c6;
+
+  --color-live: #22c07a;
+  --color-scroll-thumb: #c2c6cc;
+
+  --text-micro:      9px;
+  --text-caption:   10px;
+  --text-label:     11px;
+  --text-body:      12px;
+  --text-body-lg:   13px;
+  --text-subhead:   15px;
+  --text-title:     17px;
+  --text-display:   20px;
+  --text-display-lg:24px;
+  --text-hero:      30px;
+  --text-hero-lg:   34px;
+
+  --radius-glyph:    6px;
+  --radius-chip:    10px;
+  --radius-control: 14px;
+  --radius-panel:   18px;
+  --radius-card:    24px;
+
+  --shadow-hair:  0 1px 2px rgba(10,13,20,.05);
+  --shadow-soft:  0 1px 2px rgba(10,13,20,.05), 0 10px 26px -14px rgba(10,13,20,.22);
+  --shadow-float: 0 2px 6px rgba(10,13,20,.05), 0 26px 60px -26px rgba(10,13,20,.34);
+  --shadow-modal: 0 40px 110px -40px rgba(10,13,20,.5), 0 12px 34px -18px rgba(10,13,20,.28);
+  --shadow-brand-soft: 0 16px 40px rgba(253, 72, 22, .14);
+  --shadow-brand-lift: 0 4px 14px rgba(253, 72, 22, .35);
+
+  --ease-swish:    cubic-bezier(.22,.61,.36,1);
+  --ease-spring:   cubic-bezier(.34,1.4,.64,1);
+  --ease-entrance: cubic-bezier(.2,.8,.2,1);
+  --ease-exit:     cubic-bezier(.4,0,1,1);
+}
+
+:root {
+  --brand:      var(--color-brand);
+  --brand-deep: var(--color-brand-deep);
+  --canvas:     var(--color-canvas);
+  --card:       var(--color-card);
+  --ink:        var(--color-ink);
+  --hair:       var(--color-hair);
+  --tint:       var(--color-tint);
+  --tint-line:  var(--color-tint-line);
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--canvas);
+}
+
+body {
+  margin: 0;
+  font-family: "Figtree", -apple-system, "Segoe UI", system-ui, sans-serif;
+  color: var(--ink);
+  background: var(--canvas);
+  -webkit-font-smoothing: antialiased;
+  font-feature-settings: "cv11", "ss01";
+}
+
+button {
+  cursor: pointer;
+  corner-shape: squircle;
+}
+
+button:disabled,
+button[aria-disabled="true"] {
+  cursor: not-allowed;
+}
+
+button.rounded-full {
+  corner-shape: round;
+}
+
+.squircle {
+  corner-shape: squircle;
+}
+
+.focus-ring:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-brand) 34%, transparent);
+  outline-offset: 2px;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--color-scroll-thumb);
+  background-clip: padding-box;
+}
+
+/* Skeleton sweep for a card whose score is still being computed — ported
+   verbatim from SwishX's globals.css. Brand-tinted and low-contrast on
+   purpose: it should read as "this is working", not empty or errored. */
+@keyframes shimmer {
+  0%   { background-position: -160% 0; }
+  100% { background-position: 260% 0; }
+}
+
+.shimmer {
+  background-image: linear-gradient(
+    100deg,
+    transparent 18%,
+    color-mix(in srgb, var(--color-brand) 8%, transparent) 42%,
+    color-mix(in srgb, var(--color-brand) 15%, transparent) 50%,
+    color-mix(in srgb, var(--color-brand) 8%, transparent) 58%,
+    transparent 82%
+  );
+  background-size: 220% 100%;
+  background-repeat: no-repeat;
+  animation: shimmer 1.4s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
