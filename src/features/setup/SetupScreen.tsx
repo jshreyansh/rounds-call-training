@@ -9,7 +9,7 @@ import { Chip } from "@/components/ui/chip";
 import { Field } from "@/components/ui/field";
 import { SwishxLogo } from "@/components/brand/logo";
 import { useCallStore } from "@/store/call-store";
-import { CALLEE_ROLES, DURATIONS, MOODS, PRODUCTS, initialsOf } from "@/data/products";
+import { CALLEE_ROLES, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
 
 const FREE_EMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
 
