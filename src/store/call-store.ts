@@ -1,21 +1,20 @@
 import { create } from "zustand";
-import { CALLEE_ROLES, DURATIONS, MOODS } from "@/data/products";
+import { DOCTOR_PERSONAS, DURATIONS, MOODS } from "@/data/products";
 
-type CalleeRoleId = (typeof CALLEE_ROLES)[number]["id"];
 type MoodId = (typeof MOODS)[number]["id"];
 type DurationId = (typeof DURATIONS)[number]["id"];
 
 interface CallState {
   drugId: string | null;
   indicationId: string | null;
-  calleeRole: CalleeRoleId;
+  personaId: string;
   mood: MoodId;
   duration: DurationId;
   email: string;
   consented: boolean;
 
   setProduct: (drugId: string | null, indicationId: string | null) => void;
-  setCalleeRole: (id: CalleeRoleId) => void;
+  setPersonaId: (id: string) => void;
   setMood: (id: MoodId) => void;
   setDuration: (id: DurationId) => void;
   setEmail: (email: string) => void;
@@ -28,14 +27,14 @@ interface CallState {
 export const useCallStore = create<CallState>((set) => ({
   drugId: null,
   indicationId: null,
-  calleeRole: "doctor",
+  personaId: DOCTOR_PERSONAS[0].id,
   mood: "skeptical",
   duration: "quick",
   email: "",
   consented: true,
 
   setProduct: (drugId, indicationId) => set({ drugId, indicationId }),
-  setCalleeRole: (calleeRole) => set({ calleeRole }),
+  setPersonaId: (personaId) => set({ personaId }),
   setMood: (mood) => set({ mood }),
   setDuration: (duration) => set({ duration }),
   setEmail: (email) => set({ email }),

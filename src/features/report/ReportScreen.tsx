@@ -6,9 +6,8 @@ import { cn } from "@/lib/cn";
 import { Text, Label } from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
-import { SwishxLogo } from "@/components/brand/logo";
 import { useCallStore } from "@/store/call-store";
-import { CALLEE_ROLES, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
+import { DOCTOR_PERSONAS, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
 
 const CALL_SECONDS = 32;
 
@@ -77,12 +76,12 @@ const itemRise: Variants = {
 };
 
 export function ReportScreen() {
-  const { drugId, indicationId, mood, duration, calleeRole } = useCallStore();
+  const { drugId, indicationId, mood, duration, personaId } = useCallStore();
   const drug = PRODUCTS.find((d) => d.id === drugId) ?? PRODUCTS[0];
   const indication = drug.indications.find((i) => i.id === indicationId) ?? drug.indications[0];
   const moodLabel = MOODS.find((m) => m.id === mood)?.label ?? mood;
   const durationInfo = DURATIONS.find((d) => d.id === duration) ?? DURATIONS[1];
-  const persona = CALLEE_ROLES.find((r) => r.id === calleeRole) ?? CALLEE_ROLES[0];
+  const persona = DOCTOR_PERSONAS.find((p) => p.id === personaId) ?? DOCTOR_PERSONAS[0];
 
   const [scoring, setScoring] = useState(true);
   const [scoreShown, setScoreShown] = useState(0);
@@ -140,12 +139,12 @@ export function ReportScreen() {
     // room to be two independent scrolling panes, so the page becomes one
     // normal scrolling column instead; at lg+ it's viewport-locked with
     // each pane scrolling on its own, exactly as before.
-    <div className="flex h-screen w-screen flex-col overflow-y-auto bg-canvas lg:overflow-hidden">
+    <div className="flex h-full w-full flex-col overflow-y-auto bg-canvas lg:overflow-hidden">
       <div className="shrink-0 border-b border-hair bg-card">
+        {/* No logo here — the app shell's top bar already carries it on
+            this screen. */}
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-hair px-4 py-3 sm:px-6 lg:h-[60px] lg:px-10 lg:py-0">
           <div className="flex items-center gap-3 sm:gap-4">
-            <SwishxLogo className="h-5 w-auto" />
-            <div className="h-4.5 w-px bg-hair" />
             <Text size="body-lg" weight="bold">Call Report</Text>
           </div>
           <div className="flex flex-wrap items-center gap-3 sm:gap-5">
@@ -286,7 +285,7 @@ export function ReportScreen() {
                     You opened with a clear efficacy claim, but introduced an off-label weight-loss mention and understated a labeled safety risk when the doctor pushed on tolerability.
                   </Text>
 
-                  <Label>{persona.label} objections &amp; your responses</Label>
+                  <Label>{persona.specialty} objections &amp; your responses</Label>
                   {OBJECTIONS.map((c, i) => (
                     <div key={i} className="flex flex-col gap-2">
                       <div className="rounded-panel border border-hair bg-card p-3.5">
@@ -321,7 +320,7 @@ export function ReportScreen() {
 
                   <Label className="mt-1">Discovery</Label>
                   <Text size="body-lg" tone="subtle" leading="relaxed">
-                    No probing questions identified. Consider asking about the {persona.label.toLowerCase()}'s current GLP-1 prescribing volume before pitching.
+                    No probing questions identified. Consider asking about the {persona.specialty.toLowerCase()}'s current GLP-1 prescribing volume before pitching.
                   </Text>
                 </motion.div>
               )}

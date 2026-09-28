@@ -9,7 +9,7 @@ import { Chip } from "@/components/ui/chip";
 import { Sheet } from "@/components/patterns/sheet";
 import { SwishxMark } from "@/components/brand/logo";
 import { useCallStore } from "@/store/call-store";
-import { CALLEE_ROLES, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
+import { DOCTOR_PERSONAS, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
 
 type Phase = "connecting" | "live" | "wrap" | "ready";
 type Speaker = "doctor" | "rep";
@@ -88,12 +88,12 @@ function SpeakingBadge({ size = "md" }: { size?: "sm" | "md" }) {
 
 export function CallScreen() {
   const navigate = useNavigate();
-  const { drugId, indicationId, mood, duration, calleeRole } = useCallStore();
+  const { drugId, indicationId, mood, duration, personaId } = useCallStore();
   const drug = PRODUCTS.find((d) => d.id === drugId) ?? PRODUCTS[0];
   const indication = drug.indications.find((i) => i.id === indicationId) ?? drug.indications[0];
   const moodInfo = MOODS.find((m) => m.id === mood) ?? MOODS[0];
   const durationInfo = DURATIONS.find((d) => d.id === duration) ?? DURATIONS[0];
-  const persona = CALLEE_ROLES.find((r) => r.id === calleeRole) ?? CALLEE_ROLES[0];
+  const persona = DOCTOR_PERSONAS.find((p) => p.id === personaId) ?? DOCTOR_PERSONAS[0];
 
   const [phase, setPhase] = useState<Phase>("connecting");
   const [briefOpen, setBriefOpen] = useState(false);
@@ -279,7 +279,7 @@ export function CallScreen() {
                     </div>
                     <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-full bg-black/50 px-3 py-1.5 sm:bottom-5 sm:left-5 sm:px-3.5 sm:py-2">
                       <Text size="body-lg" tone="inverse" weight="semibold">{persona.name}</Text>
-                      <Text size="body" className="text-white/60">{persona.label}</Text>
+                      <Text size="body" className="text-white/60">{persona.specialty}</Text>
                     </div>
                     {phase === "live" && (speaker === "doctor" ? (
                       <SpeakingBadge />
