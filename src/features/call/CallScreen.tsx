@@ -9,7 +9,7 @@ import { Chip } from "@/components/ui/chip";
 import { Sheet } from "@/components/patterns/sheet";
 import { SwishxMark } from "@/components/brand/logo";
 import { useCallStore } from "@/store/call-store";
-import { CALLEE_ROLES, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
+import { DOCTOR_PERSONAS, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
 
 type Phase = "connecting" | "live" | "wrap" | "ready";
 type Speaker = "doctor" | "rep";
@@ -88,12 +88,12 @@ function SpeakingBadge({ size = "md" }: { size?: "sm" | "md" }) {
 
 export function CallScreen() {
   const navigate = useNavigate();
-  const { drugId, indicationId, mood, duration, calleeRole } = useCallStore();
+  const { drugId, indicationId, mood, duration, personaId } = useCallStore();
   const drug = PRODUCTS.find((d) => d.id === drugId) ?? PRODUCTS[0];
   const indication = drug.indications.find((i) => i.id === indicationId) ?? drug.indications[0];
   const moodInfo = MOODS.find((m) => m.id === mood) ?? MOODS[0];
   const durationInfo = DURATIONS.find((d) => d.id === duration) ?? DURATIONS[0];
-  const persona = CALLEE_ROLES.find((r) => r.id === calleeRole) ?? CALLEE_ROLES[0];
+  const persona = DOCTOR_PERSONAS.find((p) => p.id === personaId) ?? DOCTOR_PERSONAS[0];
 
   const [phase, setPhase] = useState<Phase>("connecting");
   const [briefOpen, setBriefOpen] = useState(false);
@@ -187,21 +187,15 @@ export function CallScreen() {
         )}
       </div>
 
-      {/* Below lg, the sidebar-and-stage split doesn't have room to breathe
-          (a 360px caption rail plus two video tiles just doesn't fit a
-          phone or a portrait tablet), so the whole thing becomes one
-          scrolling column instead: stage first, captions right under it.
-          At lg+ it's viewport-locked exactly as before. */}
-      <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-y-auto lg:flex-row lg:overflow-hidden">
-        <div className="relative flex min-h-[480px] shrink-0 flex-col lg:min-h-0 lg:min-w-0 lg:flex-1">
-          {/* You're in the call from the first frame; the other party
-              isn't rendered as a tile at all until they've actually
-              joined — just a slim banner above naming who's on their way
-              in, the way a real conferencing app shows it, rather than a
-              second tile sitting there mid-"connecting" as if it were
-              already occupied. The moment the join lands (join sound +
-              tile mount), the layout becomes the equal two-tile split. */}
-          <div className="flex min-h-0 flex-1 flex-col gap-2 px-4 pb-24 pt-4 sm:gap-3 sm:px-6 sm:pb-[104px] sm:pt-6">
+      {/* At lg+ this is the conferencing split: tiles on the stage,
+          captions in a rail beside them, controls floating over the
+          stage. Below that a phone has no room for a caption rail, so
+          the same three pieces reflow into a stack — small tiles up top,
+          captions taking the whole middle where the reading actually
+          happens, controls parked at the bottom. Either way the page
+          itself never scrolls; only the transcript does. */}
+      <div className="relative z-0 flex min-h-0 flex-1 flex-col overflow-hidden lg:flex-row">
+        <div className="flex shrink-0 flex-col gap-2 px-4 pt-3 sm:gap-3 sm:px-6 lg:min-h-0 lg:min-w-0 lg:flex-1 lg:shrink lg:pb-24 lg:pt-6">
             <AnimatePresence>
               {phase === "connecting" && (
                 <motion.div
@@ -226,31 +220,29 @@ export function CallScreen() {
               )}
             </AnimatePresence>
 
-            {/* Solo, the tile is capped and centered rather than
-                stretching edge to edge — a lone participant filling the
-                whole stage reads as a placeholder that grew too big, not
-                as "waiting for the other person." It only goes full-width
-                once there are two tiles sharing the row. */}
+            {/* On a phone this is a short strip across the top — about a
+                quarter of the screen — so the captions below get the room
+                they need. At lg+ it grows into the full stage. */}
             <div
               className={cn(
-                "flex min-h-0 flex-1 flex-col gap-4 sm:flex-row sm:gap-5",
-                phase === "connecting" && "sm:mx-auto sm:w-full sm:max-w-xl",
+                "flex h-[23vh] min-h-[104px] gap-3 sm:gap-4 lg:h-auto lg:min-h-0 lg:flex-1 lg:gap-5",
+                phase === "connecting" && "lg:mx-auto lg:w-full lg:max-w-xl",
               )}
             >
               <div
-                className="relative min-h-[180px] flex-1 overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl"
+                className="relative min-h-0 flex-1 overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl lg:min-h-[180px]"
                 style={{ opacity: dimmed ? 0.35 : 1, transition: "opacity 400ms ease" }}
               >
                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                   <div
-                    className="flex size-20 items-center justify-center rounded-full bg-ink-3 text-title font-semibold text-white transition-shadow duration-150 sm:size-24 sm:text-display lg:size-28"
+                    className="flex size-14 items-center justify-center rounded-full bg-ink-3 text-body-lg font-semibold text-white transition-shadow duration-150 sm:size-16 sm:text-title lg:size-28 lg:text-display"
                     style={{ boxShadow: levelGlow(repLevel) }}
                   >
                     SJ
                   </div>
                 </div>
-                <div className="absolute bottom-3 left-3 rounded-full bg-black/50 px-3 py-1.5 sm:bottom-5 sm:left-5 sm:px-3.5 sm:py-2">
-                  <Text size="body-lg" tone="inverse" weight="semibold">You</Text>
+                <div className="absolute bottom-2 left-2 rounded-full bg-black/50 px-2.5 py-1 sm:bottom-3 sm:left-3 lg:bottom-5 lg:left-5 lg:px-3.5 lg:py-2">
+                  <Text size="caption" tone="inverse" weight="semibold" className="lg:text-body-lg">You</Text>
                 </div>
                 {micMuted && (
                   <div className="absolute right-3 top-3 flex items-center justify-center rounded-full bg-black/50 p-2 text-white/70 sm:right-4 sm:top-4">
@@ -267,19 +259,22 @@ export function CallScreen() {
                     animate={{ opacity: dimmed ? 0.35 : 1, scale: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.3, ease: [0.2, 0.8, 0.2, 1] }}
-                    className="relative min-h-[180px] flex-1 overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl"
+                    className="relative min-h-0 flex-1 overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl lg:min-h-[180px]"
                   >
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
                       <img
                         src={persona.photo}
                         alt=""
-                        className="size-20 rounded-full object-cover transition-shadow duration-150 sm:size-24 lg:size-28"
+                        className="size-14 rounded-full object-cover transition-shadow duration-150 sm:size-16 lg:size-28"
                         style={{ boxShadow: levelGlow(doctorLevel) }}
                       />
                     </div>
-                    <div className="absolute bottom-3 left-3 flex items-center gap-2 rounded-full bg-black/50 px-3 py-1.5 sm:bottom-5 sm:left-5 sm:px-3.5 sm:py-2">
-                      <Text size="body-lg" tone="inverse" weight="semibold">{persona.name}</Text>
-                      <Text size="body" className="text-white/60">{persona.label}</Text>
+                    {/* Capped and truncating — in the phone's quarter-height
+                        strip the tile is half the screen wide, and a
+                        wrapping name turns the pill into a two-line blob. */}
+                    <div className="absolute bottom-2 left-2 flex max-w-[calc(100%-1rem)] items-center gap-2 rounded-full bg-black/50 px-2.5 py-1 sm:bottom-3 sm:left-3 lg:bottom-5 lg:left-5 lg:max-w-[calc(100%-2.5rem)] lg:px-3.5 lg:py-2">
+                      <Text size="caption" tone="inverse" weight="semibold" truncate className="lg:text-body-lg">{persona.name}</Text>
+                      <Text size="body" truncate className="hidden text-white/60 lg:inline">{persona.specialty}</Text>
                     </div>
                     {phase === "live" && (speaker === "doctor" ? (
                       <SpeakingBadge />
@@ -297,49 +292,14 @@ export function CallScreen() {
                 )}
               </AnimatePresence>
             </div>
-          </div>
-
-          <AnimatePresence>
-            {phase === "live" && (
-              <motion.div
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: 8 }}
-                className="absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-3.5 rounded-full border border-white/15 bg-black/40 px-4 py-2.5 sm:bottom-6"
-              >
-                <IconButton
-                  aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
-                  size={9}
-                  onClick={() => setMicMuted((v) => !v)}
-                  className={cn(
-                    "border",
-                    micMuted ? "border-transparent bg-white text-danger" : "border-white/15 bg-white/10 text-white hover:bg-white/20",
-                  )}
-                >
-                  {micMuted ? <MicOff className="size-4.5" /> : <Mic className="size-4.5" />}
-                </IconButton>
-                <IconButton
-                  aria-label="End call"
-                  size={9}
-                  onClick={endCall}
-                  className="border-transparent bg-danger text-white hover:bg-danger-deep"
-                >
-                  <PhoneOff className="size-4.5" />
-                </IconButton>
-              </motion.div>
-            )}
-          </AnimatePresence>
         </div>
 
         {/* Live captions — so the rep can follow the exchange without
-            replaying it later. Only exists once there is something said.
-            A floating glass tile, like the doctor and rep tiles, at lg+;
-            below that it drops out of the sidebar and becomes its own
-            full-width block under the stage instead of disappearing.
-            Width is set entirely by these classes, never animated — a
-            growing "width: auto" here would fight the fixed lg sidebar
-            width once captions text piled up, squeezing the video tiles
-            into thin strips instead of leaving them their equal share. */}
+            replaying it later. Its own column at every width, scrolling
+            internally so the transcript piling up never changes the
+            page's height. Width is set entirely by these classes, never
+            animated — a growing "width: auto" here would squeeze the
+            video tiles into thin strips as captions accumulated. */}
         <AnimatePresence>
           {showTranscript && (
             <motion.div
@@ -347,7 +307,7 @@ export function CallScreen() {
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.3, ease: [0.22, 0.61, 0.36, 1] }}
-              className="mx-4 mb-4 flex min-h-[220px] w-[calc(100%-2rem)] shrink-0 flex-col overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl sm:mx-6 sm:mb-6 sm:w-[calc(100%-3rem)] lg:my-6 lg:mr-6 lg:ml-0 lg:min-h-0 lg:w-[360px]"
+              className="mx-4 mt-3 flex min-h-0 flex-1 flex-col overflow-hidden rounded-card border border-white/15 bg-white/10 backdrop-blur-xl sm:mx-6 lg:mx-0 lg:my-6 lg:mr-6 lg:w-[360px] lg:flex-none"
             >
               <div className="flex h-11 shrink-0 items-center border-b border-white/10 px-4">
                 <Label className="text-white/50">Live captions</Label>
@@ -376,6 +336,40 @@ export function CallScreen() {
                 </AnimatePresence>
                 <div ref={transcriptEndRef} />
               </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Mic and hang-up. A static bar under the captions on a phone,
+            where thumbs expect it; a pill floating over the stage at lg+,
+            offset left to clear the 360px caption rail beside it. */}
+        <AnimatePresence>
+          {phase === "live" && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 8 }}
+              className="mx-auto my-3 flex shrink-0 items-center gap-3.5 rounded-full border border-white/15 bg-black/40 px-4 py-2.5 lg:absolute lg:bottom-6 lg:left-[calc(50%-192px)] lg:my-0 lg:-translate-x-1/2"
+            >
+              <IconButton
+                aria-label={micMuted ? "Unmute microphone" : "Mute microphone"}
+                size={9}
+                onClick={() => setMicMuted((v) => !v)}
+                className={cn(
+                  "border",
+                  micMuted ? "border-transparent bg-white text-danger" : "border-white/15 bg-white/10 text-white hover:bg-white/20",
+                )}
+              >
+                {micMuted ? <MicOff className="size-4.5" /> : <Mic className="size-4.5" />}
+              </IconButton>
+              <IconButton
+                aria-label="End call"
+                size={9}
+                onClick={endCall}
+                className="border-transparent bg-danger text-white hover:bg-danger-deep"
+              >
+                <PhoneOff className="size-4.5" />
+              </IconButton>
             </motion.div>
           )}
         </AnimatePresence>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, Pencil, Pill, Search, Syringe, Wind, Check } from "lucide-react";
@@ -8,10 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Field } from "@/components/ui/field";
 import { SwishxLogo } from "@/components/brand/logo";
+import { AppShellMenuButton } from "@/components/layout/AppShell";
 import { useCallStore } from "@/store/call-store";
-import { CALLEE_ROLES, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
+import { DOCTOR_PERSONAS, DURATIONS, MOODS, PRODUCTS, type DoctorPersona } from "@/data/products";
 
 const FREE_EMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
+
+/** How long the "generating doctor personas" shimmer runs once a drug and
+ *  indication resolve. */
+const PERSONA_GENERATE_MS = 9000;
 
 function emailDomain(email: string) {
   const at = email.lastIndexOf("@");
@@ -60,98 +65,6 @@ function DoneBadge({ done }: { done: boolean }) {
   );
 }
 
-/**
- * A chip row that measures its own available width and collapses to a
- * "+N" affordance rather than letting a longer label like "Decision Maker"
- * force an unpredictable wrap. Clicking it reveals the rest, wrapping onto a second row —
- * everything below just flows down with it, since this is plain layout,
- * not an overlay.
- */
-function OverflowChips({
-  items, value, onChange,
-}: {
-  items: readonly { id: string; label: string }[];
-  value: string;
-  onChange: (id: string) => void;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const measureRef = useRef<HTMLDivElement>(null);
-  const [visibleCount, setVisibleCount] = useState(items.length);
-
-  useEffect(() => {
-    const GAP = 8;
-    const MORE_WIDTH = 56;
-    const recalc = () => {
-      const available = containerRef.current?.clientWidth ?? 0;
-      const chipEls = measureRef.current ? Array.from(measureRef.current.children) as HTMLElement[] : [];
-      let used = 0;
-      let count = 0;
-      for (let i = 0; i < chipEls.length; i++) {
-        const w = chipEls[i].getBoundingClientRect().width;
-        const next = used + w + (i > 0 ? GAP : 0);
-        const isLast = i === chipEls.length - 1;
-        const reserve = isLast ? 0 : MORE_WIDTH + GAP;
-        if (next + reserve > available) break;
-        used = next;
-        count = i + 1;
-      }
-      setVisibleCount(Math.max(1, count));
-    };
-    recalc();
-    const ro = new ResizeObserver(recalc);
-    if (containerRef.current) ro.observe(containerRef.current);
-    return () => ro.disconnect();
-  }, [items]);
-
-  const shown = expanded ? items : items.slice(0, visibleCount);
-  const hidden = items.length - shown.length;
-
-  return (
-    <div className="relative">
-      {/* Off-screen twin, used only to measure each chip's natural width. */}
-      <div ref={measureRef} aria-hidden className="pointer-events-none absolute left-0 top-0 flex -translate-y-full gap-2 opacity-0">
-        {items.map((item) => (
-          <Chip key={item.id} size="lg" className="shrink-0">{item.label}</Chip>
-        ))}
-      </div>
-
-      <div ref={containerRef} className={cn("flex gap-2", expanded ? "flex-wrap" : "flex-nowrap overflow-hidden")}>
-        {shown.map((item) => (
-          <Chip
-            key={item.id}
-            size="lg"
-            selected={value === item.id}
-            tone="brand"
-            className="shrink-0"
-            onClick={() => onChange(item.id)}
-          >
-            {item.label}
-          </Chip>
-        ))}
-        {!expanded && hidden > 0 && (
-          <button
-            type="button"
-            onClick={() => setExpanded(true)}
-            className="focus-ring inline-flex shrink-0 items-center rounded-chip border border-dashed border-hair-2 px-2.5 py-1 text-label font-semibold text-ink-3 hover:bg-subtle hover:text-ink"
-          >
-            +{hidden}
-          </button>
-        )}
-        {expanded && items.length > visibleCount && (
-          <button
-            type="button"
-            onClick={() => setExpanded(false)}
-            className="focus-ring shrink-0 self-center text-label font-semibold text-ink-3 underline decoration-hair-2 underline-offset-2 hover:text-ink"
-          >
-            Show less
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /** A stand-in for a real product photo — a route-appropriate icon on a
  *  tinted circle, in place of the plain two-letter initials, without
  *  pulling in an actual (and possibly copyrighted) stock photo. */
@@ -165,6 +78,20 @@ const MOBILE_STEPS = [
   { key: "details", label: "Details", heading: "Set the call details." },
   { key: "email", label: "Email", heading: "Add your email for the debrief." },
 ] as const;
+
+/** The full-width bar AppShell renders above the sidebar — kept as its
+ *  own component (rather than inline in the screen) so it can sit
+ *  outside the [sidebar | content] row instead of being squeezed beside
+ *  the sidebar's full height. Same content at every width; only the
+ *  hamburger (self-hiding at lg+) varies. */
+export function SetupScreenHeader() {
+  return (
+    <div className="flex h-11 shrink-0 items-center gap-2 border-b border-hair px-4 sm:gap-3 sm:px-6 lg:px-10">
+      <AppShellMenuButton />
+      <SwishxLogo className="h-5 w-auto" />
+    </div>
+  );
+}
 
 export function SetupScreen() {
   const navigate = useNavigate();
@@ -209,7 +136,31 @@ export function SetupScreen() {
     setQuery("");
   }
 
-  const calleeRoleInfo = CALLEE_ROLES.find((r) => r.id === store.calleeRole)!;
+  // ---- Doctor persona generation — Alex Reyes is always available as
+  // the default, but the other two doctors only "exist" once a drug and
+  // indication are resolved, revealed after a shimmer that stands in for
+  // the app generating personas suited to that drug. ----
+  const [personaGenerating, setPersonaGenerating] = useState(false);
+  const [personasRevealed, setPersonasRevealed] = useState(false);
+  const resolvedProductKey = hasProduct ? `${selectedDrug!.id}:${store.indicationId}` : null;
+
+  useEffect(() => {
+    if (!resolvedProductKey) {
+      setPersonaGenerating(false);
+      setPersonasRevealed(false);
+      return;
+    }
+    setPersonaGenerating(true);
+    setPersonasRevealed(false);
+    useCallStore.getState().setPersonaId(DOCTOR_PERSONAS[0].id);
+    const t = setTimeout(() => {
+      setPersonaGenerating(false);
+      setPersonasRevealed(true);
+    }, PERSONA_GENERATE_MS);
+    return () => clearTimeout(t);
+  }, [resolvedProductKey]);
+
+  const selectedPersona = DOCTOR_PERSONAS.find((p) => p.id === store.personaId) ?? DOCTOR_PERSONAS[0];
   const moodLabel = MOODS.find((m) => m.id === store.mood)!.label;
   const durationInfo = DURATIONS.find((d) => d.id === store.duration)!;
 
@@ -375,8 +326,40 @@ export function SetupScreen() {
     return (
       <>
         <div>
-          <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Who are you calling?</Text>
-          <OverflowChips items={CALLEE_ROLES} value={store.calleeRole} onChange={(v) => store.setCalleeRole(v as typeof store.calleeRole)} />
+          <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Which doctor are you calling?</Text>
+          {personaGenerating ? (
+            <div className="flex flex-wrap gap-2">
+              {DOCTOR_PERSONAS.map((p) => (
+                <div key={p.id} className="shimmer h-8 w-36 rounded-chip" />
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {(personasRevealed ? DOCTOR_PERSONAS : [DOCTOR_PERSONAS[0]]).map((p) => (
+                <Chip
+                  key={p.id}
+                  size="lg"
+                  selected={p.id === store.personaId}
+                  tone="brand"
+                  iconLeft={(
+                    <img
+                      src={p.photo}
+                      alt=""
+                      className={cn("size-5 rounded-full object-cover", p.placeholder && "opacity-70")}
+                    />
+                  )}
+                  onClick={() => store.setPersonaId(p.id)}
+                >
+                  {p.name}
+                </Chip>
+              ))}
+            </div>
+          )}
+          {personaGenerating && (
+            <Text size="caption" tone="subtle" className="mt-1.5 block">
+              Generating doctor personas for this drug&hellip;
+            </Text>
+          )}
         </div>
 
         <div>
@@ -449,16 +432,7 @@ export function SetupScreen() {
 
   return isDesktop
     ? (
-      <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-canvas">
-        <div className="flex h-11 shrink-0 items-center justify-between border-b border-hair px-10">
-          <div className="flex items-center gap-3">
-            <SwishxLogo className="h-5 w-auto" />
-            <div className="h-4 w-px bg-hair" />
-            <Text size="body-lg" weight="bold">AI Sales Roleplay Setup</Text>
-          </div>
-          <Text size="body" tone="subtle">New practice call</Text>
-        </div>
-
+      <div className="relative flex h-full w-full flex-col overflow-hidden bg-canvas">
         <div className="flex min-h-0 flex-1 gap-4 overflow-y-auto px-5 pb-28 pt-5">
           {/* The form itself */}
           <div className="flex flex-1 flex-col gap-5">
@@ -549,72 +523,97 @@ export function SetupScreen() {
               works. Desktop-only — mobile carries its own compact
               version instead of shrinking this one. */}
           <div className="relative flex h-[560px] w-[350px] shrink-0 flex-col self-start overflow-hidden rounded-card border border-hair shadow-hair">
-            <video
-              key={calleeRoleInfo.id}
-              src={calleeRoleInfo.video}
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="absolute inset-0 size-full object-cover"
-              style={{ objectPosition: "center 75%" }}
-            />
+            {/* While personas are being generated the card has nobody to
+                show yet, so it shimmers too — the picker alone going
+                quiet reads as a glitch when the face beside it is still
+                confidently showing the previous doctor. */}
+            {personaGenerating ? (
+              <div className="flex size-full flex-col items-center justify-center gap-2 bg-subtle">
+                <div className="shimmer absolute inset-0" />
+                <span className="relative size-7 animate-spin rounded-full border-2 border-hair-2 border-t-brand" />
+                <Text size="body" weight="semibold" tone="subtle" className="relative">
+                  Generating personas&hellip;
+                </Text>
+              </div>
+            ) : (
+              <>
+                {selectedPersona.video ? (
+                  <video
+                    key={selectedPersona.id}
+                    src={selectedPersona.video}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 size-full object-cover"
+                    style={{ objectPosition: "center 75%" }}
+                  />
+                ) : (
+                  <img
+                    key={selectedPersona.id}
+                    src={selectedPersona.photo}
+                    alt=""
+                    className="absolute inset-0 size-full object-cover"
+                  />
+                )}
 
-            {/* A dark scrim at the top so the eyebrow stays legible over
-                whatever part of the photo lands there. */}
-            <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/50 to-transparent" />
+                {/* A dark scrim at the top so the eyebrow stays legible
+                    over whatever part of the photo lands there. */}
+                <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/50 to-transparent" />
 
-            {/* The frosted glass itself: two upward-fading layers, one
-                for the blur and one for the white tint, so the glass
-                tapers into the photo instead of ending in a hard line.
-                Kept short (under half the card) so most of the photo
-                stays a photo. */}
-            <div
-              className="absolute inset-x-0 bottom-0 h-[52%] backdrop-blur-2xl"
-              style={{
-                maskImage: "linear-gradient(to top, black 45%, transparent 100%)",
-                WebkitMaskImage: "linear-gradient(to top, black 45%, transparent 100%)",
-              }}
-            />
-            <div className="absolute inset-x-0 bottom-0 h-[56%] bg-gradient-to-t from-white/95 via-white/75 to-transparent" />
+                {/* The frosted glass itself: two upward-fading layers,
+                    one for the blur and one for the white tint, so the
+                    glass tapers into the photo instead of ending in a
+                    hard line. Kept short (under half the card) so most
+                    of the photo stays a photo. */}
+                <div
+                  className="absolute inset-x-0 bottom-0 h-[52%] backdrop-blur-2xl"
+                  style={{
+                    maskImage: "linear-gradient(to top, black 45%, transparent 100%)",
+                    WebkitMaskImage: "linear-gradient(to top, black 45%, transparent 100%)",
+                  }}
+                />
+                <div className="absolute inset-x-0 bottom-0 h-[56%] bg-gradient-to-t from-white/95 via-white/75 to-transparent" />
 
-            <div className="relative z-10 p-4">
-              <Label className="text-white/90 drop-shadow-sm">Who you're about to meet</Label>
-              <Text
-                as="div"
-                size="body"
-                weight="bold"
-                tone="inverse"
-                className={cn("mt-1 drop-shadow-sm", !hasProduct && "font-normal italic text-white/70")}
-              >
-                {hasProduct ? `${selectedDrug!.name} · ${indication!.label}` : "Not selected yet"}
-              </Text>
-            </div>
-
-            <div className="flex-1" />
-
-            <div className="relative z-10 flex flex-col gap-2.5 p-4 pt-2">
-              <div>
-                <div className="flex items-center gap-1.5">
-                  <Text size="subhead" weight="bold">{calleeRoleInfo.name}</Text>
-                  <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-ok text-white">
-                    <Check className="size-2.5" />
-                  </span>
+                <div className="relative z-10 p-4">
+                  <Label className="text-white/90 drop-shadow-sm">Who you're about to meet</Label>
+                  <Text
+                    as="div"
+                    size="body"
+                    weight="bold"
+                    tone="inverse"
+                    className={cn("mt-1 drop-shadow-sm", !hasProduct && "font-normal italic text-white/70")}
+                  >
+                    {hasProduct ? `${selectedDrug!.name} · ${indication!.label}` : "Not selected yet"}
+                  </Text>
                 </div>
-                <Text size="body" tone="subtle">{calleeRoleInfo.label}</Text>
-              </div>
 
-              <div className="flex flex-wrap gap-1.5">
-                <Chip tone="brand" size="sm">{moodLabel}</Chip>
-                <Chip size="sm">{durationInfo.label} · {durationInfo.time}</Chip>
-              </div>
+                <div className="flex-1" />
 
-              <div className="h-px bg-hair" />
+                <div className="relative z-10 flex flex-col gap-2.5 p-4 pt-2">
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <Text size="subhead" weight="bold">{selectedPersona.name}</Text>
+                      <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-ok text-white">
+                        <Check className="size-2.5" />
+                      </span>
+                    </div>
+                    <Text size="body" tone="subtle">{selectedPersona.specialty}</Text>
+                  </div>
 
-              <Text size="caption" tone="subtle" leading="snug">
-                Every claim gets checked against the current FDA label.
-              </Text>
-            </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    <Chip tone="brand" size="sm">{moodLabel}</Chip>
+                    <Chip size="sm">{durationInfo.label} · {durationInfo.time}</Chip>
+                  </div>
+
+                  <div className="h-px bg-hair" />
+
+                  <Text size="caption" tone="subtle" leading="snug">
+                    Every claim gets checked against the current FDA label.
+                  </Text>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -657,7 +656,8 @@ export function SetupScreen() {
       <MobileSetupFlow
         step={mobileStep}
         setStep={setMobileStep}
-        calleeRoleInfo={calleeRoleInfo}
+        selectedPersona={selectedPersona}
+        personaGenerating={personaGenerating}
         moodLabel={moodLabel}
         durationInfo={durationInfo}
         hasProduct={hasProduct}
@@ -692,13 +692,14 @@ export function SetupScreen() {
  *  banner, which was the thing actually getting cropped badly at this
  *  width. */
 function MobileSetupFlow({
-  step, setStep, calleeRoleInfo, moodLabel, durationInfo,
+  step, setStep, selectedPersona, personaGenerating, moodLabel, durationInfo,
   hasProduct, hasValidEmail, consented, canStart, onStart,
   renderProductControls, renderDetailsControls, renderConsentToggle, emailField,
 }: {
   step: number;
   setStep: (fn: (s: number) => number) => void;
-  calleeRoleInfo: (typeof CALLEE_ROLES)[number];
+  selectedPersona: DoctorPersona;
+  personaGenerating: boolean;
   moodLabel: string;
   durationInfo: (typeof DURATIONS)[number];
   hasProduct: boolean;
@@ -729,15 +730,7 @@ function MobileSetupFlow({
   }
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas">
-      <div className="flex h-11 shrink-0 items-center border-b border-hair px-4">
-        <div className="flex items-center gap-2">
-          <SwishxLogo className="h-5 w-auto" />
-          <div className="h-4 w-px bg-hair" />
-          <Text size="body-lg" weight="bold">AI Sales Roleplay Setup</Text>
-        </div>
-      </div>
-
+    <div className="flex h-full w-full flex-col overflow-hidden bg-canvas">
       {/* A compact, persistent identity card — a circular thumbnail
           crops forgivingly at any size, unlike trying to shrink a tall
           full-bleed portrait into a short banner. The bar itself stays
@@ -745,27 +738,46 @@ function MobileSetupFlow({
           centered, so a tablet-width screen doesn't stretch it thin. */}
       <div className="flex shrink-0 items-center border-b border-hair bg-card px-4 py-3">
         <div className="mx-auto flex w-full max-w-xl items-center gap-3">
-          <div className="relative size-12 shrink-0 overflow-hidden rounded-full border border-hair-2 bg-subtle">
-            <video
-              key={calleeRoleInfo.id}
-              src={calleeRoleInfo.video}
-              autoPlay
-              loop
-              muted
-              playsInline
-              className="absolute inset-0 size-full object-cover"
-              style={{ objectPosition: "center 18%" }}
-            />
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5">
-              <Text size="body" weight="bold" truncate>{calleeRoleInfo.name}</Text>
-              <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-ok text-white">
-                <Check className="size-2" />
-              </span>
-            </div>
-            <Text size="caption" tone="subtle">{calleeRoleInfo.label}</Text>
-          </div>
+          {/* While personas are being generated this bar has nobody to
+              show yet, so it shimmers like the picker and the desktop
+              profile card rather than holding up the previous doctor. */}
+          {personaGenerating ? (
+            <>
+              <div className="shimmer size-12 shrink-0 rounded-full bg-subtle" />
+              <div className="min-w-0 flex-1">
+                <Text as="div" size="body" weight="semibold" tone="subtle">Generating personas&hellip;</Text>
+                <div className="shimmer mt-1.5 h-2.5 w-24 rounded-glyph bg-subtle" />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="relative size-12 shrink-0 overflow-hidden rounded-full border border-hair-2 bg-subtle">
+                {selectedPersona.video ? (
+                  <video
+                    key={selectedPersona.id}
+                    src={selectedPersona.video}
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
+                    className="absolute inset-0 size-full object-cover"
+                    style={{ objectPosition: "center 18%" }}
+                  />
+                ) : (
+                  <img key={selectedPersona.id} src={selectedPersona.photo} alt="" className="absolute inset-0 size-full object-cover" />
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <Text size="body" weight="bold" truncate>{selectedPersona.name}</Text>
+                  <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-ok text-white">
+                    <Check className="size-2" />
+                  </span>
+                </div>
+                <Text size="caption" tone="subtle">{selectedPersona.specialty}</Text>
+              </div>
+            </>
+          )}
           <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
             <Chip tone="brand" size="xs">{moodLabel}</Chip>
             <Chip size="xs">{durationInfo.label}</Chip>
@@ -839,8 +851,12 @@ function MobileSetupFlow({
       <div className="flex shrink-0 flex-col gap-1.5 border-t border-hair bg-card px-4 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] pt-3">
         <div className="mx-auto flex w-full max-w-xl flex-col gap-1.5">
           {hint && <Text size="caption" tone="subtle" className="text-center">{hint}</Text>}
+          {/* The primary button takes the leftover space with flex-1,
+              not `fullWidth` — a w-full child in a flex row claims the
+              whole row and pushes itself past the edge once Back is
+              beside it. */}
           <div className="flex items-center gap-3">
-            {step > 0 ? (
+            {step > 0 && (
               <Button
                 variant="secondary"
                 size="md"
@@ -850,14 +866,12 @@ function MobileSetupFlow({
                 <ChevronLeft className="size-4" />
                 Back
               </Button>
-            ) : (
-              <div />
             )}
             <Button
               size="md"
-              fullWidth
               disabled={isLastStep ? !canStart : nextDisabled}
               onClick={goNext}
+              className="min-w-0 flex-1"
             >
               {isLastStep ? "Start the call" : "Next"}
             </Button>
