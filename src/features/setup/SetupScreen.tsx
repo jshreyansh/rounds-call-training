@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { ChevronLeft, Pencil, Pill, Search, Syringe, Wind, Check } from "lucide-react";
@@ -7,15 +7,11 @@ import { Text, Label } from "@/components/ui/text";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { Field } from "@/components/ui/field";
+import { SwishxLogo } from "@/components/brand/logo";
 import { useCallStore } from "@/store/call-store";
-import { DOCTOR_PERSONAS, DURATIONS, MOODS, PRODUCTS, type DoctorPersona } from "@/data/products";
+import { CALLEE_ROLES, DURATIONS, MOODS, PRODUCTS } from "@/data/products";
 
 const FREE_EMAIL_DOMAINS = new Set(["gmail.com", "googlemail.com"]);
-
-/** How long the "generating doctor personas" shimmer runs once a drug and
- *  indication resolve — deliberately long enough to read as the app
- *  actually doing work, not an instant swap. */
-const PERSONA_GENERATE_MS = 9000;
 
 function emailDomain(email: string) {
   const at = email.lastIndexOf("@");
@@ -64,6 +60,98 @@ function DoneBadge({ done }: { done: boolean }) {
   );
 }
 
+/**
+ * A chip row that measures its own available width and collapses to a
+ * "+N" affordance rather than letting a longer label like "Decision Maker"
+ * force an unpredictable wrap. Clicking it reveals the rest, wrapping onto a second row —
+ * everything below just flows down with it, since this is plain layout,
+ * not an overlay.
+ */
+function OverflowChips({
+  items, value, onChange,
+}: {
+  items: readonly { id: string; label: string }[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
+  const [visibleCount, setVisibleCount] = useState(items.length);
+
+  useEffect(() => {
+    const GAP = 8;
+    const MORE_WIDTH = 56;
+    const recalc = () => {
+      const available = containerRef.current?.clientWidth ?? 0;
+      const chipEls = measureRef.current ? Array.from(measureRef.current.children) as HTMLElement[] : [];
+      let used = 0;
+      let count = 0;
+      for (let i = 0; i < chipEls.length; i++) {
+        const w = chipEls[i].getBoundingClientRect().width;
+        const next = used + w + (i > 0 ? GAP : 0);
+        const isLast = i === chipEls.length - 1;
+        const reserve = isLast ? 0 : MORE_WIDTH + GAP;
+        if (next + reserve > available) break;
+        used = next;
+        count = i + 1;
+      }
+      setVisibleCount(Math.max(1, count));
+    };
+    recalc();
+    const ro = new ResizeObserver(recalc);
+    if (containerRef.current) ro.observe(containerRef.current);
+    return () => ro.disconnect();
+  }, [items]);
+
+  const shown = expanded ? items : items.slice(0, visibleCount);
+  const hidden = items.length - shown.length;
+
+  return (
+    <div className="relative">
+      {/* Off-screen twin, used only to measure each chip's natural width. */}
+      <div ref={measureRef} aria-hidden className="pointer-events-none absolute left-0 top-0 flex -translate-y-full gap-2 opacity-0">
+        {items.map((item) => (
+          <Chip key={item.id} size="lg" className="shrink-0">{item.label}</Chip>
+        ))}
+      </div>
+
+      <div ref={containerRef} className={cn("flex gap-2", expanded ? "flex-wrap" : "flex-nowrap overflow-hidden")}>
+        {shown.map((item) => (
+          <Chip
+            key={item.id}
+            size="lg"
+            selected={value === item.id}
+            tone="brand"
+            className="shrink-0"
+            onClick={() => onChange(item.id)}
+          >
+            {item.label}
+          </Chip>
+        ))}
+        {!expanded && hidden > 0 && (
+          <button
+            type="button"
+            onClick={() => setExpanded(true)}
+            className="focus-ring inline-flex shrink-0 items-center rounded-chip border border-dashed border-hair-2 px-2.5 py-1 text-label font-semibold text-ink-3 hover:bg-subtle hover:text-ink"
+          >
+            +{hidden}
+          </button>
+        )}
+        {expanded && items.length > visibleCount && (
+          <button
+            type="button"
+            onClick={() => setExpanded(false)}
+            className="focus-ring shrink-0 self-center text-label font-semibold text-ink-3 underline decoration-hair-2 underline-offset-2 hover:text-ink"
+          >
+            Show less
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** A stand-in for a real product photo — a route-appropriate icon on a
  *  tinted circle, in place of the plain two-letter initials, without
  *  pulling in an actual (and possibly copyrighted) stock photo. */
@@ -72,49 +160,8 @@ function RouteIcon({ route, className }: { route: string; className?: string }) 
   return <Icon className={className} />;
 }
 
-/** One doctor option in the persona picker — a small photo tile rather
- *  than a text chip, since "which doctor" genuinely benefits from seeing
- *  a face, the way the specialty/mood/duration chips above it don't. */
-function PersonaTile({
-  persona, selected, onSelect,
-}: {
-  persona: DoctorPersona;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      className={cn(
-        "flex w-[108px] shrink-0 flex-col items-center gap-1.5 rounded-panel border p-2.5 text-center transition-colors",
-        selected ? "border-brand bg-tint" : "border-hair-2 bg-card hover:bg-subtle",
-      )}
-    >
-      <span className="relative flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-hair-2 bg-subtle">
-        <img
-          src={persona.photo}
-          alt=""
-          className={cn("size-full object-cover", persona.placeholder && "opacity-80")}
-          style={persona.placeholder ? undefined : { objectPosition: "center 18%" }}
-        />
-        {selected && (
-          <span className="absolute -bottom-0.5 -right-0.5 flex size-4 items-center justify-center rounded-full bg-ok text-white ring-2 ring-card">
-            <Check className="size-2.5" />
-          </span>
-        )}
-      </span>
-      <Text size="caption" weight="bold" truncate className="w-full">{persona.name}</Text>
-      <Text size="micro" tone={persona.placeholder ? "faint" : "subtle"} truncate className="w-full">
-        {persona.specialty}
-      </Text>
-    </button>
-  );
-}
-
 const MOBILE_STEPS = [
-  { key: "product", label: "Product", heading: "Select the drug for discussion." },
+  { key: "product", label: "Product", heading: "Select the therapy area or drug for discussion." },
   { key: "details", label: "Details", heading: "Set the call details." },
   { key: "email", label: "Email", heading: "Add your email for the debrief." },
 ] as const;
@@ -162,31 +209,7 @@ export function SetupScreen() {
     setQuery("");
   }
 
-  // ---- Doctor persona generation — Alex Reyes is always available as
-  // the default, but the other two doctors only "exist" once a drug and
-  // indication are resolved, revealed after a shimmer that stands in for
-  // the app generating personas suited to that drug. ----
-  const [personaGenerating, setPersonaGenerating] = useState(false);
-  const [personasRevealed, setPersonasRevealed] = useState(false);
-  const resolvedProductKey = hasProduct ? `${selectedDrug!.id}:${store.indicationId}` : null;
-
-  useEffect(() => {
-    if (!resolvedProductKey) {
-      setPersonaGenerating(false);
-      setPersonasRevealed(false);
-      return;
-    }
-    setPersonaGenerating(true);
-    setPersonasRevealed(false);
-    useCallStore.getState().setPersonaId(DOCTOR_PERSONAS[0].id);
-    const t = setTimeout(() => {
-      setPersonaGenerating(false);
-      setPersonasRevealed(true);
-    }, PERSONA_GENERATE_MS);
-    return () => clearTimeout(t);
-  }, [resolvedProductKey]);
-
-  const selectedPersona = DOCTOR_PERSONAS.find((p) => p.id === store.personaId) ?? DOCTOR_PERSONAS[0];
+  const calleeRoleInfo = CALLEE_ROLES.find((r) => r.id === store.calleeRole)!;
   const moodLabel = MOODS.find((m) => m.id === store.mood)!.label;
   const durationInfo = DURATIONS.find((d) => d.id === store.duration)!;
 
@@ -348,37 +371,13 @@ export function SetupScreen() {
     );
   }
 
-  function renderPersonaPicker() {
-    const visiblePersonas = personasRevealed ? DOCTOR_PERSONAS : [DOCTOR_PERSONAS[0]];
-    return (
-      <div>
-        <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Which doctor are you calling?</Text>
-        {personaGenerating ? (
-          <div className="flex flex-wrap gap-2.5">
-            {DOCTOR_PERSONAS.map((p) => (
-              <div key={p.id} className="shimmer h-[104px] w-[108px] shrink-0 rounded-panel" />
-            ))}
-          </div>
-        ) : (
-          <div className="flex flex-wrap gap-2.5">
-            {visiblePersonas.map((p) => (
-              <PersonaTile key={p.id} persona={p} selected={p.id === store.personaId} onSelect={() => store.setPersonaId(p.id)} />
-            ))}
-          </div>
-        )}
-        {personaGenerating && (
-          <Text size="caption" tone="subtle" className="mt-1.5">
-            Generating doctor personas for this drug&hellip;
-          </Text>
-        )}
-      </div>
-    );
-  }
-
   function renderDetailsControls() {
     return (
       <>
-        {renderPersonaPicker()}
+        <div>
+          <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Who are you calling?</Text>
+          <OverflowChips items={CALLEE_ROLES} value={store.calleeRole} onChange={(v) => store.setCalleeRole(v as typeof store.calleeRole)} />
+        </div>
 
         <div>
           <Text size="label" weight="semibold" tone="muted" className="mb-1.5 block">Select in what mood are they?</Text>
@@ -450,164 +449,78 @@ export function SetupScreen() {
 
   return isDesktop
     ? (
-      <div className="relative flex h-full w-full flex-col overflow-hidden bg-canvas">
-        <div className="flex h-11 shrink-0 items-center justify-between border-b border-hair px-6">
-          <Text size="body-lg" weight="bold">AI Sales Roleplay Demo Setup</Text>
+      <div className="relative flex h-screen w-screen flex-col overflow-hidden bg-canvas">
+        <div className="flex h-11 shrink-0 items-center justify-between border-b border-hair px-10">
+          <div className="flex items-center gap-3">
+            <SwishxLogo className="h-5 w-auto" />
+            <div className="h-4 w-px bg-hair" />
+            <Text size="body-lg" weight="bold">AI Sales Roleplay Setup</Text>
+          </div>
           <Text size="body" tone="subtle">New practice call</Text>
         </div>
 
-        <div className="flex min-h-0 flex-1">
-          {/* Who you're about to meet — centered in the remaining space
-              rather than pinned to an edge, so it reads as the focal
-              point of the screen with the form beside it, not a sidebar
-              of its own. The persona plays on loop here (muted, so it
-              never fights the call audio), and swaps with whichever
-              doctor is picked in the panel to the right — a keyed
-              remount rather than just changing `src`, since some
-              browsers won't reload an already-playing video on a bare
-              src change. Placeholder personas have no video yet, so
-              they fall back to a plain photo. */}
-          <div className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto p-6">
-            <div className="relative flex h-[560px] w-[350px] shrink-0 flex-col overflow-hidden rounded-card border border-hair shadow-hair">
-              {selectedPersona.video ? (
-                <video
-                  key={selectedPersona.id}
-                  src={selectedPersona.video}
-                  autoPlay
-                  loop
-                  muted
-                  playsInline
-                  className="absolute inset-0 size-full object-cover"
-                  style={{ objectPosition: "center 75%" }}
-                />
-              ) : (
-                <img
-                  key={selectedPersona.id}
-                  src={selectedPersona.photo}
-                  alt=""
-                  className="absolute inset-0 size-full object-cover"
-                />
-              )}
-
-              {/* A dark scrim at the top so the eyebrow stays legible
-                  over whatever part of the photo lands there. */}
-              <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/50 to-transparent" />
-
-              {/* The frosted glass itself: two upward-fading layers, one
-                  for the blur and one for the white tint, so the glass
-                  tapers into the photo instead of ending in a hard line.
-                  Kept short (under half the card) so most of the photo
-                  stays a photo. */}
-              <div
-                className="absolute inset-x-0 bottom-0 h-[52%] backdrop-blur-2xl"
-                style={{
-                  maskImage: "linear-gradient(to top, black 45%, transparent 100%)",
-                  WebkitMaskImage: "linear-gradient(to top, black 45%, transparent 100%)",
-                }}
-              />
-              <div className="absolute inset-x-0 bottom-0 h-[56%] bg-gradient-to-t from-white/95 via-white/75 to-transparent" />
-
-              <div className="relative z-10 p-4">
-                <Label className="text-white/90 drop-shadow-sm">Who you're about to meet</Label>
-                <Text
-                  as="div"
-                  size="body"
-                  weight="bold"
-                  tone="inverse"
-                  className={cn("mt-1 drop-shadow-sm", !hasProduct && "font-normal italic text-white/70")}
-                >
-                  {hasProduct ? `${selectedDrug!.name} · ${indication!.label}` : "Not selected yet"}
+        <div className="flex min-h-0 flex-1 gap-4 overflow-y-auto px-5 pb-28 pt-5">
+          {/* The form itself */}
+          <div className="flex flex-1 flex-col gap-5">
+            {/* Q1 — product */}
+            <div className="relative z-10 rounded-card border border-hair bg-card p-4 shadow-hair">
+              <DoneBadge done={hasProduct} />
+              <div className="mb-2.5 flex items-baseline gap-3">
+                <StepMark done={hasProduct} mark="1" />
+                <Text as="div" size="title" weight="semibold">
+                  Select the therapy area or drug for discussion.
                 </Text>
               </div>
 
-              <div className="flex-1" />
-
-              <div className="relative z-10 flex flex-col gap-2.5 p-4 pt-2">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <Text size="subhead" weight="bold">{selectedPersona.name}</Text>
-                    <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-ok text-white">
-                      <Check className="size-2.5" />
-                    </span>
-                  </div>
-                  <Text size="body" tone="subtle">{selectedPersona.specialty}</Text>
-                </div>
-
-                {/* Every fact that's been resolved reads as a chip here —
-                    drug/indication included, not just mood and duration —
-                    so the card is a consistent little summary of the
-                    whole setup, not two different presentation styles
-                    stacked on top of each other. */}
-                <div className="flex flex-wrap gap-1.5">
-                  {hasProduct && (
-                    <Chip size="sm">{selectedDrug!.name} · {indication!.label}</Chip>
-                  )}
-                  <Chip tone="brand" size="sm">{moodLabel}</Chip>
-                  <Chip size="sm">{durationInfo.label} · {durationInfo.time}</Chip>
-                </div>
-
-                <div className="h-px bg-hair" />
-
-                <Text size="caption" tone="subtle" leading="snug">
-                  Every claim gets checked against the current FDA label.
-                </Text>
+              {/* Indented to the same left edge as the heading text (past
+                  the step-number circle + its gap), not the card's own
+                  padding edge. A fixed-height slot for whichever state is
+                  showing, so resolving the product never shifts every
+                  card below it down the page. */}
+              <div className="flex min-h-[76px] items-center pl-9">
+                {renderProductControls()}
               </div>
             </div>
-          </div>
 
-          {/* The form — a fixed-width right panel now, not the main
-              event. Its own scroll and its own floating CTA, so "Start
-              the call" stays anchored under the questions it belongs
-              to rather than centered across the whole screen. */}
-          <div className="relative flex w-[440px] shrink-0 flex-col border-l border-hair">
-            <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-5 pb-28">
-              {/* Q1 — product */}
-              <div className="relative z-10 rounded-card border border-hair bg-card p-4 shadow-hair">
-                <DoneBadge done={hasProduct} />
-                <div className="mb-2.5 flex items-baseline gap-3">
-                  <StepMark done={hasProduct} mark="1" />
-                  <Text as="div" size="title" weight="semibold">
-                    Select the drug for discussion.
-                  </Text>
-                </div>
-
-                {/* Indented to the same left edge as the heading text
-                    (past the step-number circle + its gap), not the
-                    card's own padding edge. A fixed-height slot for
-                    whichever state is showing, so resolving the product
-                    never shifts every card below it down the page. */}
-                <div className="flex min-h-[76px] items-center pl-9">
-                  {renderProductControls()}
-                </div>
+            {/* Q2 — physician */}
+            <div className="relative rounded-card border border-hair bg-card p-4 shadow-hair">
+              <DoneBadge done />
+              <div className="mb-2.5 flex items-baseline gap-3">
+                <StepMark done mark="2" />
+                <Text as="div" size="title" weight="medium" className="italic">
+                  Set the call details.
+                </Text>
               </div>
 
-              {/* Q2 — physician */}
-              <div className="relative rounded-card border border-hair bg-card p-4 shadow-hair">
-                <DoneBadge done />
-                <div className="mb-2.5 flex items-baseline gap-3">
-                  <StepMark done mark="2" />
-                  <Text as="div" size="title" weight="semibold">
-                    Set the call details.
-                  </Text>
-                </div>
-
-                {/* Same left indent as Q1 and Q3's body — aligned under
-                    the heading text, not the step-number circle. */}
-                <div className="flex flex-col gap-6 pl-9">
-                  {renderDetailsControls()}
-                </div>
+              {/* Same left indent as Q1 and Q3's body — aligned under the
+                  heading text, not the step-number circle. Generous gap
+                  between the three questions here specifically, since
+                  this is the one card carrying three separate asks
+                  rather than one. */}
+              <div className="flex flex-col gap-6 pl-9">
+                {renderDetailsControls()}
               </div>
+            </div>
 
-              {/* Q3 — email */}
-              <div className="relative rounded-card border border-hair bg-card p-4 shadow-hair">
-                <DoneBadge done={hasValidEmail && store.consented} />
-                <div className="flex items-baseline gap-3 pr-11">
+            {/* Q3 — email */}
+            <div className="relative rounded-card border border-hair bg-card p-4 shadow-hair">
+              <DoneBadge done={hasValidEmail && store.consented} />
+              {/* The field rides the same line as the question rather
+                  than a row of its own below it. */}
+              <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
+                <div className="flex items-baseline gap-3">
                   <StepMark done={hasValidEmail && store.consented} mark="3" />
-                  <Text as="div" size="title" weight="semibold">
+                  <Text as="div" size="title" weight="medium" className="italic">
                     Add your email for the debrief.
                   </Text>
                 </div>
-                <div className="mt-3 flex flex-col gap-3 pl-9">
+                {/* Field's own wrapper is a hardcoded w-full, which — in a
+                    wrapped flex row — always claims the whole row's width
+                    and forces itself onto its own line no matter what
+                    className reaches the input inside it. A fixed-width,
+                    non-growing wrapper around it is what actually keeps
+                    it beside the heading. */}
+                <div className="w-[280px] shrink-0">
                   <Field
                     type="email"
                     aria-label="Work email"
@@ -617,48 +530,126 @@ export function SetupScreen() {
                     value={store.email}
                     onChange={(e) => store.setEmail(e.target.value)}
                   />
-                  {renderConsentToggle()}
                 </div>
               </div>
-            </div>
-
-            {/* The one place the call actually starts. Rather than a
-                hard-edged bar (which clips whatever card ends up behind
-                it) or a fully invisible one (which lets that card's own
-                edge run right under the button), it fades in as frosted
-                glass, anchored to this panel rather than the whole
-                screen. */}
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32">
-              <div
-                className="absolute inset-0 backdrop-blur-xl"
-                style={{
-                  maskImage: "linear-gradient(to top, black 30%, transparent 100%)",
-                  WebkitMaskImage: "linear-gradient(to top, black 30%, transparent 100%)",
-                }}
-              />
-              <div
-                className="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/70 to-transparent"
-                style={{
-                  maskImage: "linear-gradient(to top, black 30%, transparent 100%)",
-                  WebkitMaskImage: "linear-gradient(to top, black 30%, transparent 100%)",
-                }}
-              />
-            </div>
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 px-5 pb-6 pt-1">
-              {!canStart && (
-                <Text size="caption" tone="subtle" className="pointer-events-none text-center">{readinessMessage}</Text>
-              )}
-              <Button
-                size="md"
-                fullWidth
-                disabled={!canStart}
-                onClick={() => canStart && navigate("/call")}
-                className="pointer-events-auto shadow-float"
-              >
-                Start the call
-              </Button>
+              <div className="mt-3 flex flex-wrap items-start gap-4 pl-9">
+                {renderConsentToggle()}
+              </div>
             </div>
           </div>
+
+          {/* Who you're about to meet — a profile card, not a data
+              sheet. The persona plays on loop here (muted, so it never
+              fights the call audio), and swaps with the role picked
+              above — a keyed remount rather than just changing `src`,
+              since some browsers won't reload an already-playing video
+              on a bare src change. Every other screen uses the matching
+              still photo instead. The details ride a frosted glass
+              panel rising from the bottom, the way a share-profile card
+              works. Desktop-only — mobile carries its own compact
+              version instead of shrinking this one. */}
+          <div className="relative flex h-[560px] w-[350px] shrink-0 flex-col self-start overflow-hidden rounded-card border border-hair shadow-hair">
+            <video
+              key={calleeRoleInfo.id}
+              src={calleeRoleInfo.video}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="absolute inset-0 size-full object-cover"
+              style={{ objectPosition: "center 75%" }}
+            />
+
+            {/* A dark scrim at the top so the eyebrow stays legible over
+                whatever part of the photo lands there. */}
+            <div className="absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/50 to-transparent" />
+
+            {/* The frosted glass itself: two upward-fading layers, one
+                for the blur and one for the white tint, so the glass
+                tapers into the photo instead of ending in a hard line.
+                Kept short (under half the card) so most of the photo
+                stays a photo. */}
+            <div
+              className="absolute inset-x-0 bottom-0 h-[52%] backdrop-blur-2xl"
+              style={{
+                maskImage: "linear-gradient(to top, black 45%, transparent 100%)",
+                WebkitMaskImage: "linear-gradient(to top, black 45%, transparent 100%)",
+              }}
+            />
+            <div className="absolute inset-x-0 bottom-0 h-[56%] bg-gradient-to-t from-white/95 via-white/75 to-transparent" />
+
+            <div className="relative z-10 p-4">
+              <Label className="text-white/90 drop-shadow-sm">Who you're about to meet</Label>
+              <Text
+                as="div"
+                size="body"
+                weight="bold"
+                tone="inverse"
+                className={cn("mt-1 drop-shadow-sm", !hasProduct && "font-normal italic text-white/70")}
+              >
+                {hasProduct ? `${selectedDrug!.name} · ${indication!.label}` : "Not selected yet"}
+              </Text>
+            </div>
+
+            <div className="flex-1" />
+
+            <div className="relative z-10 flex flex-col gap-2.5 p-4 pt-2">
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <Text size="subhead" weight="bold">{calleeRoleInfo.name}</Text>
+                  <span className="flex size-4 shrink-0 items-center justify-center rounded-full bg-ok text-white">
+                    <Check className="size-2.5" />
+                  </span>
+                </div>
+                <Text size="body" tone="subtle">{calleeRoleInfo.label}</Text>
+              </div>
+
+              <div className="flex flex-wrap gap-1.5">
+                <Chip tone="brand" size="sm">{moodLabel}</Chip>
+                <Chip size="sm">{durationInfo.label} · {durationInfo.time}</Chip>
+              </div>
+
+              <div className="h-px bg-hair" />
+
+              <Text size="caption" tone="subtle" leading="snug">
+                Every claim gets checked against the current FDA label.
+              </Text>
+            </div>
+          </div>
+        </div>
+
+        {/* The one place the call actually starts. Rather than a
+            hard-edged bar (which clips whatever card ends up behind it)
+            or a fully invisible one (which lets that card's own edge
+            run right under the button), it fades in as frosted glass. */}
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 h-32">
+          <div
+            className="absolute inset-0 backdrop-blur-xl"
+            style={{
+              maskImage: "linear-gradient(to top, black 30%, transparent 100%)",
+              WebkitMaskImage: "linear-gradient(to top, black 30%, transparent 100%)",
+            }}
+          />
+          <div
+            className="absolute inset-0 bg-gradient-to-t from-canvas via-canvas/70 to-transparent"
+            style={{
+              maskImage: "linear-gradient(to top, black 30%, transparent 100%)",
+              WebkitMaskImage: "linear-gradient(to top, black 30%, transparent 100%)",
+            }}
+          />
+        </div>
+        <div className="pointer-events-none absolute inset-x-0 bottom-0 flex flex-col items-center gap-1.5 pb-6 pt-1">
+          {!canStart && (
+            <Text size="caption" tone="subtle" className="pointer-events-none">{readinessMessage}</Text>
+          )}
+          <Button
+            size="md"
+            disabled={!canStart}
+            onClick={() => canStart && navigate("/call")}
+            className="pointer-events-auto min-w-[220px] shadow-float"
+          >
+            Start the call
+          </Button>
         </div>
       </div>
     )
@@ -666,7 +657,7 @@ export function SetupScreen() {
       <MobileSetupFlow
         step={mobileStep}
         setStep={setMobileStep}
-        selectedPersona={selectedPersona}
+        calleeRoleInfo={calleeRoleInfo}
         moodLabel={moodLabel}
         durationInfo={durationInfo}
         hasProduct={hasProduct}
@@ -701,13 +692,13 @@ export function SetupScreen() {
  *  banner, which was the thing actually getting cropped badly at this
  *  width. */
 function MobileSetupFlow({
-  step, setStep, selectedPersona, moodLabel, durationInfo,
+  step, setStep, calleeRoleInfo, moodLabel, durationInfo,
   hasProduct, hasValidEmail, consented, canStart, onStart,
   renderProductControls, renderDetailsControls, renderConsentToggle, emailField,
 }: {
   step: number;
   setStep: (fn: (s: number) => number) => void;
-  selectedPersona: DoctorPersona;
+  calleeRoleInfo: (typeof CALLEE_ROLES)[number];
   moodLabel: string;
   durationInfo: (typeof DURATIONS)[number];
   hasProduct: boolean;
@@ -738,9 +729,14 @@ function MobileSetupFlow({
   }
 
   return (
-    <div className="flex h-full w-full flex-col overflow-hidden bg-canvas">
-      {/* No page header of its own here — the app shell's top bar
-          (logo, hamburger, login) already covers that on this screen. */}
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-canvas">
+      <div className="flex h-11 shrink-0 items-center border-b border-hair px-4">
+        <div className="flex items-center gap-2">
+          <SwishxLogo className="h-5 w-auto" />
+          <div className="h-4 w-px bg-hair" />
+          <Text size="body-lg" weight="bold">AI Sales Roleplay Setup</Text>
+        </div>
+      </div>
 
       {/* A compact, persistent identity card — a circular thumbnail
           crops forgivingly at any size, unlike trying to shrink a tall
@@ -750,29 +746,25 @@ function MobileSetupFlow({
       <div className="flex shrink-0 items-center border-b border-hair bg-card px-4 py-3">
         <div className="mx-auto flex w-full max-w-xl items-center gap-3">
           <div className="relative size-12 shrink-0 overflow-hidden rounded-full border border-hair-2 bg-subtle">
-            {selectedPersona.video ? (
-              <video
-                key={selectedPersona.id}
-                src={selectedPersona.video}
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="absolute inset-0 size-full object-cover"
-                style={{ objectPosition: "center 18%" }}
-              />
-            ) : (
-              <img key={selectedPersona.id} src={selectedPersona.photo} alt="" className="absolute inset-0 size-full object-cover" />
-            )}
+            <video
+              key={calleeRoleInfo.id}
+              src={calleeRoleInfo.video}
+              autoPlay
+              loop
+              muted
+              playsInline
+              className="absolute inset-0 size-full object-cover"
+              style={{ objectPosition: "center 18%" }}
+            />
           </div>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
-              <Text size="body" weight="bold" truncate>{selectedPersona.name}</Text>
+              <Text size="body" weight="bold" truncate>{calleeRoleInfo.name}</Text>
               <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full bg-ok text-white">
                 <Check className="size-2" />
               </span>
             </div>
-            <Text size="caption" tone="subtle">{selectedPersona.specialty}</Text>
+            <Text size="caption" tone="subtle">{calleeRoleInfo.label}</Text>
           </div>
           <div className="flex shrink-0 flex-wrap justify-end gap-1.5">
             <Chip tone="brand" size="xs">{moodLabel}</Chip>

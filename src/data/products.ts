@@ -76,30 +76,23 @@ export const PRODUCTS: Product[] = [
   },
 ];
 
-/** Every call is with a doctor now — the old "who are you calling" role
- *  picker (decision maker / patient / caregiver / pharmacist) is gone.
- *  What varies instead is *which* doctor: a set of personas the app
- *  "generates" once a drug and indication are picked, since a rep
- *  pitching an oncologist needs a different doctor than one pitching an
- *  endocrinologist. Alex Reyes is the one persona with a real photo and
- *  video today and is always available immediately; the other two are
- *  placeholders (no photo/video yet) ready to swap in real assets. */
-export interface DoctorPersona {
-  id: string;
-  name: string;
-  specialty: string;
-  video?: string;
-  photo: string;
-  /** No real photo/video yet — rendered with a generic silhouette and
-   *  marked as pending rather than pretending to be a finished persona. */
-  placeholder?: boolean;
-}
+/** Who the rep is calling — this drives how the persona treats the pitch
+ *  (a formulary conversation reads very differently from a bedside one),
+ *  so it's asked directly rather than inferred from a specialty. Fixed
+ *  regardless of product, unlike the old specialty list. Each role carries
+ *  its own name, looping video (Setup's profile card) and still photo
+ *  (the video's poster frame, and everywhere a static image is needed —
+ *  the call stage, the report), so switching roles swaps who you're
+ *  meeting everywhere that persona shows up, not just on one screen. */
+export const CALLEE_ROLES = [
+  { id: "doctor", label: "Doctor", name: "Dr. Alex Reyes", video: "/doctor-video.mp4", photo: "/doctor-photo.jpg" },
+  { id: "decision-maker", label: "Decision Maker", name: "Martin Cole", video: "/persona-decision-maker.mp4", photo: "/persona-decision-maker.jpg" },
+  { id: "patient", label: "Patient", name: "Emma Sutter", video: "/persona-patient.mp4", photo: "/persona-patient.webp" },
+  { id: "caregiver", label: "Caregiver", name: "Priya Nair", video: "/persona-caregiver.mp4", photo: "/persona-caregiver.png" },
+  { id: "pharmacist", label: "Pharmacist", name: "Marcus Bennett", video: "/persona-pharmacist.mp4", photo: "/persona-pharmacist.jpg" },
+] as const;
 
-export const DOCTOR_PERSONAS: DoctorPersona[] = [
-  { id: "alex-reyes", name: "Dr. Alex Reyes", specialty: "Endocrinologist", video: "/doctor-video.mp4", photo: "/doctor-photo.jpg" },
-  { id: "persona-2", name: "Doctor Persona 2", specialty: "Photo & video pending", photo: "/persona-placeholder.svg", placeholder: true },
-  { id: "persona-3", name: "Doctor Persona 3", specialty: "Photo & video pending", photo: "/persona-placeholder.svg", placeholder: true },
-];
+export type CalleeRole = (typeof CALLEE_ROLES)[number];
 
 export const MOODS = [
   { id: "friendly", label: "Friendly", emoji: "🙂" },
@@ -115,3 +108,12 @@ export const DURATIONS = [
   { id: "tough", label: "Tough", time: "8 min", seconds: 480 },
 ] as const;
 
+export function initialsOf(name: string) {
+  return name.slice(0, 2).toUpperCase();
+}
+
+/** Stand-in headshot for the AI persona — a supplied stock photo (not a
+ *  real person), used everywhere Dr. Reyes appears: setup, the call
+ *  stage, and the report. */
+export const DOCTOR_PHOTO_URL = "/doctor-photo.jpg";
+export const DOCTOR_NAME = "Dr. Alex Reyes";
